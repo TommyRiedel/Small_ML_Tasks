@@ -16,8 +16,7 @@ Vollständiges ML-Projekt mit dem California Housing Dataset:
 - Cross-Validation
 
 **Versionen:**
-- `02_End2EndML.py` - Original
-- `02_End2EndML_improved.py` - Optimiert mit SVR
+- `02_End2EndML.py` - Vollständige Version mit SVR
 - `02_End2EndML_FAST.py` - Schnelle Version ohne CV
 
 ## Setup
