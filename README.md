@@ -15,10 +15,6 @@ Vollständiges ML-Projekt mit dem California Housing Dataset:
 - Hyperparameter Tuning mit GridSearch & RandomizedSearch
 - Cross-Validation
 
-**Versionen:**
-- `02_End2EndML.py` - Vollständige Version mit SVR
-- `02_End2EndML_FAST.py` - Schnelle Version ohne CV
-
 ## Setup
 
 ```bash
@@ -35,5 +31,5 @@ pip install scikit-learn pandas matplotlib numpy scipy
 ## Ausführen
 
 ```bash
-python 02_End2EndML_FAST.py
+python 02_End2EndML.py
 ```
