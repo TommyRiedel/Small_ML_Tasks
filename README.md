@@ -15,6 +15,17 @@ Vollständiges ML-Projekt mit dem California Housing Dataset:
 - Hyperparameter Tuning mit GridSearch & RandomizedSearch
 - Cross-Validation
 
+### 03 - Classification
+Klassifikation mit MNIST Dataset:
+- Binary Classification (5 vs nicht-5)
+- Multiclass Classification (alle 10 Ziffern)
+- Error Analysis
+- Multilabel Classification
+- Multioutput Classification (Denoising)
+- KNN GridSearch für >97% Accuracy
+- Data Augmentation durch Image Shifting
+- Titanic Survival Prediction
+
 ## Setup
 
 ```bash
@@ -32,4 +43,5 @@ pip install scikit-learn pandas matplotlib numpy scipy
 
 ```bash
 python 02_End2EndML.py
+python 03_Classification.py
 ```
