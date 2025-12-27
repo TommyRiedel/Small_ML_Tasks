@@ -26,6 +26,14 @@ Klassifikation mit MNIST Dataset:
 - Data Augmentation durch Image Shifting
 - Titanic Survival Prediction
 
+### 04 - Linear Models
+Lineare Modelle für Regression und Klassifikation:
+- Linear Regression
+- Polynomial Regression (Under-/Overfitting)
+- Regularization (Ridge L2, Lasso L1, Elastic Net)
+- Logistic Regression (Binary Classification)
+- Softmax Regression (Multiclass Classification)
+
 ## Setup
 
 ```bash
@@ -44,4 +52,5 @@ pip install scikit-learn pandas matplotlib numpy scipy
 ```bash
 python 02_End2EndML.py
 python 03_Classification.py
+python 04_LinModels.py
 ```
