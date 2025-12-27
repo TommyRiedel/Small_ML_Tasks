@@ -34,6 +34,14 @@ Lineare Modelle für Regression und Klassifikation:
 - Logistic Regression (Binary Classification)
 - Softmax Regression (Multiclass Classification)
 
+### 05 - Decision Trees
+Entscheidungsbäume für Klassifikation und Regression:
+- Decision Tree Classifier (Iris Dataset)
+- Decision Tree Regressor (Quadratische Funktion)
+- Overfitting vermeiden (Regularization Parameter)
+- Hyperparameter: max_depth, min_samples_leaf, max_features
+- Vor- und Nachteile von Decision Trees
+
 ## Setup
 
 ```bash
@@ -53,4 +61,5 @@ pip install scikit-learn pandas matplotlib numpy scipy
 python 02_End2EndML.py
 python 03_Classification.py
 python 04_LinModels.py
+python 05_DecisionTrees.py
 ```
