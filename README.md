@@ -42,6 +42,13 @@ Entscheidungsbäume für Klassifikation und Regression:
 - Hyperparameter: max_depth, min_samples_leaf, max_features
 - Vor- und Nachteile von Decision Trees
 
+### 06 - Ensemble Learning
+Ensemble-Methoden für bessere Vorhersagen:
+- Voting Classifier (Hard Voting)
+- Bagging (Bootstrap Aggregating)
+- Random Forest (Feature Importances)
+- AdaBoost (Adaptive Boosting)
+
 ## Setup
 
 ```bash
@@ -62,4 +69,5 @@ python 02_End2EndML.py
 python 03_Classification.py
 python 04_LinModels.py
 python 05_DecisionTrees.py
+python 06_EnsembleLearning.py
 ```
