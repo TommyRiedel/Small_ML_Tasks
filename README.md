@@ -44,10 +44,22 @@ Entscheidungsbäume für Klassifikation und Regression:
 
 ### 06 - Ensemble Learning
 Ensemble-Methoden für bessere Vorhersagen:
-- Voting Classifier (Hard Voting)
-- Bagging (Bootstrap Aggregating)
-- Random Forest (Feature Importances)
-- AdaBoost (Adaptive Boosting)
+- Voting Classifier (Hard Voting - Mehrheitsentscheidung)
+- Bagging (Bootstrap Aggregating mit OOB Score)
+- Random Forest (Feature Importances auf Iris Dataset)
+- AdaBoost (Adaptive Boosting mit Weak Learners)
+- Vergleich: Einzelner Tree vs. Ensemble-Methoden
+- Wann welche Methode: Overfitting → Bagging, Underfitting → Boosting
+
+### 07 - Dimensionality Reduction
+Dimensionsreduktion mit verschiedenen Techniken:
+- PCA (Principal Component Analysis) - Varianzmaximierung
+- Incremental PCA - Für große Datasets (batch-weise)
+- Random Projection - Schnelle Approximation (Johnson-Lindenstrauss)
+- LLE (Locally Linear Embedding) - Manifold Learning
+- MDS, Isomap, t-SNE - Weitere Manifold-Methoden
+- Kernel PCA - Nichtlineare Dimensionsreduktion
+- Anwendung auf MNIST (784 → 154 Dimensionen bei 95% Varianz)
 
 ## Setup
 
@@ -70,4 +82,5 @@ python 03_Classification.py
 python 04_LinModels.py
 python 05_DecisionTrees.py
 python 06_EnsembleLearning.py
+python 07_DimReduction.py
 ```
