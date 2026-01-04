@@ -83,6 +83,15 @@ Künstliche neuronale Netze mit scikit-learn:
 - Hyperparameter Tuning (hidden_layer_sizes, alpha, learning_rate)
 - Probability Predictions und Confidence Analysis
 
+### 10 - Neural Networks with PyTorch
+Einführung in PyTorch für Deep Learning:
+- Tensor Operationen (Shapes, Indexing, Math)
+- NumPy Integration
+- GPU/MPS Acceleration (CUDA/Metal)
+- Performance Vergleich CPU vs GPU
+- Autograd (Automatische Differentiation)
+- Gradient Computation mit requires_grad
+
 ## Setup
 
 ```bash
@@ -93,7 +102,7 @@ python -m venv .SmallMLTasks
 .SmallMLTasks\Scripts\activate
 
 # Dependencies installieren
-pip install scikit-learn pandas matplotlib numpy scipy
+pip install scikit-learn pandas matplotlib numpy scipy torch
 ```
 
 ## Ausführen
@@ -107,4 +116,5 @@ python 06_EnsembleLearning.py
 python 07_DimReduction.py
 python 08_UnsupervisedLearning.py
 python 09_ANN.py
+python 10_NN_PyTorch.py
 ```
