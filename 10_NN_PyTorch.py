@@ -17,7 +17,7 @@ print(X@X.T)
 
 print(X.numpy())
 print(torch.tensor(np.array([[1., 4., 7.], [2., 3., 6.]])))
-print(torch.FloatTensor([[1., 4., 7.], [2., 3., 6.]]), dtype=torch.float32)
+print(torch.tensor(np.array([[1., 4., 7.], [2., 3., 6.]]), dtype=torch.float32))
 print(torch.FloatTensor([[1., 4., 7.], [2., 3., 6.]]))
 X[:, 1] = -99
 print(X)
@@ -64,12 +64,6 @@ for iteration in range(100):
     x.grad.zero_()  # reset the gradients
 print(x)
 
-t = torch.tensor(2.0, requires_grad=True)
-z = t.exp()
-z += 1
-z.backward()
-
-
 ######
 from sklearn.datasets import fetch_california_housing
 from sklearn.model_selection import train_test_split
@@ -109,7 +103,7 @@ y_test = torch.FloatTensor(y_test).reshape(-1, 1)
 torch.manual_seed(42)
 n_features = X_train.shape[1]
 w = torch.randn((n_features, 1), requires_grad=True)
-b = torch.randn(0., requires_grad=True)
+b = torch.tensor(0., requires_grad=True)
 
 learning_rate = 0.4
 n_epochs = 20
@@ -234,7 +228,7 @@ def mse(y_pred, y_true):
 print(evaluate(model, valid_loader, mse))
 print(valid_mse.sqrt())
 
-print(evaluate(model, valid_loader, aggregate_fn = lambda metrics:torch.sqrt(torch.mean(metrics))))
+print(evaluate(model, valid_loader, mse, aggregate_fn = lambda metrics:torch.sqrt(torch.mean(metrics))))
 import torchmetrics
 
 def evaluate_tm(model, data_loader, metric):
