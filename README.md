@@ -61,6 +61,19 @@ Dimensionsreduktion mit verschiedenen Techniken:
 - Kernel PCA - Nichtlineare Dimensionsreduktion
 - Anwendung auf MNIST (784 → 154 Dimensionen bei 95% Varianz)
 
+### 08 - Unsupervised Learning
+Clustering-Algorithmen und unüberwachtes Lernen:
+- K-Means Clustering (Elbow Method, Silhouette Score)
+- Mini-Batch K-Means (für große Datasets)
+- Image Segmentation (Color Quantization)
+- Semi-Supervised Learning (Label Propagation)
+- DBSCAN (Density-Based Clustering, Outlier Detection)
+- Spectral Clustering (Graph-Based)
+- Agglomerative Clustering (Hierarchical)
+- Gaussian Mixture Models (Soft Clustering, Anomaly Detection)
+- Model Selection (BIC, AIC)
+- Bayesian GMM (Automatic Component Selection)
+
 ## Setup
 
 ```bash
@@ -83,4 +96,5 @@ python 04_LinModels.py
 python 05_DecisionTrees.py
 python 06_EnsembleLearning.py
 python 07_DimReduction.py
+python 08_UnsupervisedLearning.py
 ```
