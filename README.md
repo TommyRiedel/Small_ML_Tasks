@@ -74,6 +74,15 @@ Clustering-Algorithmen und unüberwachtes Lernen:
 - Model Selection (BIC, AIC)
 - Bayesian GMM (Automatic Component Selection)
 
+### 09 - Artificial Neural Networks
+Künstliche neuronale Netze mit scikit-learn:
+- Perceptron (Binary Classification auf Iris)
+- MLP Regressor (California Housing mit 3 Hidden Layers)
+- MLP Classifier (Fashion MNIST mit 2 Hidden Layers)
+- Early Stopping zur Vermeidung von Overfitting
+- Hyperparameter Tuning (hidden_layer_sizes, alpha, learning_rate)
+- Probability Predictions und Confidence Analysis
+
 ## Setup
 
 ```bash
@@ -97,4 +106,5 @@ python 05_DecisionTrees.py
 python 06_EnsembleLearning.py
 python 07_DimReduction.py
 python 08_UnsupervisedLearning.py
+python 09_ANN.py
 ```
