@@ -1,44 +1,29 @@
-# VERBESSERUNGEN:
-# 1. Imports konsolidiert (keine Duplikate mehr)
-# 2. Unnötige Zwischenschritte entfernt
-# 3. Hauptproblem am Ende behoben: .keys() gibt dict_keys zurück, kein Index möglich
-# 4. Code in logische Sektionen unterteilt
-
 from pathlib import Path
 import pandas as pd
 import tarfile
 import urllib.request
 import matplotlib.pyplot as plt
 import numpy as np
-from zlib import crc32
 
-# Sklearn imports konsolidiert
-from sklearn.model_selection import (train_test_split, StratifiedShuffleSplit, 
-                                      cross_val_score, GridSearchCV, RandomizedSearchCV)
+from sklearn.model_selection import (train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV)
 from sklearn.svm import SVR
-from scipy.stats import loguniform, uniform
-from sklearn.preprocessing import (OrdinalEncoder, OneHotEncoder, MinMaxScaler, 
-                                   StandardScaler, FunctionTransformer)
+from scipy.stats import loguniform
+from sklearn.preprocessing import (OneHotEncoder, StandardScaler, FunctionTransformer)
 from sklearn.impute import SimpleImputer
-from sklearn.ensemble import IsolationForest, RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics.pairwise import rbf_kernel
 from sklearn.linear_model import LinearRegression
-from sklearn.compose import TransformedTargetRegressor, ColumnTransformer, make_column_selector, make_column_transformer
+from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.utils.validation import check_array, check_is_fitted
 from sklearn.cluster import KMeans
 from sklearn.pipeline import Pipeline, make_pipeline
-from sklearn import set_config
 from sklearn.metrics import root_mean_squared_error
 from sklearn.tree import DecisionTreeRegressor
-from scipy.stats import binom
-from pandas.plotting import scatter_matrix
 
 np.random.seed(42)
 
-# ============================================================================
 # 1. DATEN LADEN
-# ============================================================================
+
 def load_housing_data():
     tarball_path = Path("datasets/housing.tgz")
     if not tarball_path.is_file():
@@ -51,10 +36,8 @@ def load_housing_data():
 
 housing = load_housing_data()
 
-# ============================================================================
-# 2. TRAIN/TEST SPLIT - Nur die beste Methode verwenden
-# VERBESSERUNG: Alte manuelle Split-Funktionen entfernt, nur stratified split behalten
-# ============================================================================
+# 2. TRAIN/TEST SPLIT stratified sampling split
+
 housing["income_cat"] = pd.cut(housing["median_income"],
                                bins=[0., 1.5, 3.0, 4.5, 6., np.inf],
                                labels=[1, 2, 3, 4, 5])
@@ -69,26 +52,23 @@ for set_ in (strat_train_set, strat_test_set):
 
 housing = strat_train_set.copy()
 
-# ============================================================================
 # 3. EXPLORATIVE DATENANALYSE (optional, auskommentiert für Performance)
-# ============================================================================
-# housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.2, grid=True,
-#              s=housing["population"]/100, label="population",
-#              c="median_house_value", cmap="jet", colorbar=True, legend=True)
-# plt.show()
 
-# corr_matrix = housing.corr(numeric_only=True)
-# print(corr_matrix["median_house_value"].sort_values(ascending=False))
+housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.2, grid=True,
+             s=housing["population"]/100, label="population",
+             c="median_house_value", cmap="jet", colorbar=True, legend=True)
+plt.show()
 
-# ============================================================================
+corr_matrix = housing.corr(numeric_only=True)
+print(corr_matrix["median_house_value"].sort_values(ascending=False))
+
 # 4. DATEN VORBEREITEN
-# ============================================================================
+
 housing = strat_train_set.drop("median_house_value", axis=1)
 housing_labels = strat_train_set["median_house_value"].copy()
 
-# ============================================================================
 # 5. CUSTOM TRANSFORMERS
-# ============================================================================
+
 class ClusterSimilarity(BaseEstimator, TransformerMixin):
     """Berechnet RBF-Ähnlichkeit zu Cluster-Zentren"""
     def __init__(self, n_clusters=10, gamma=1.0, random_state=None):
@@ -107,10 +87,8 @@ class ClusterSimilarity(BaseEstimator, TransformerMixin):
     def get_feature_names_out(self, names=None):  # BUGFIX: Typo korrigiert
         return [f"cluster_{i}_similarity" for i in range(self.n_clusters)]
 
-# ============================================================================
 # 6. PREPROCESSING PIPELINE
-# VERBESSERUNG: Direkt die finale Pipeline definieren, Zwischenschritte entfernt
-# ============================================================================
+
 def column_ratio(X):
     """Berechnet Verhältnis zwischen zwei Spalten"""
     return X[:, [0]] / X[:, [1]]
@@ -148,13 +126,7 @@ preprocessing = ColumnTransformer([
     ("cat", cat_pipeline, make_column_selector(dtype_include=object)),
 ], remainder=default_num_pipeline)
 
-# ============================================================================
 # 7. MODELLE TRAINIEREN UND EVALUIEREN
-# VERBESSERUNG: Nur relevante Modelle, Cross-Validation für bessere Schätzung
-# ============================================================================
-print("=" * 60)
-print("MODELL EVALUATION MIT CROSS-VALIDATION")
-print("=" * 60)
 
 # Linear Regression
 lin_reg = make_pipeline(preprocessing, LinearRegression())
@@ -177,48 +149,34 @@ forest_rmses = -cross_val_score(forest_reg, housing, housing_labels,
 print("\nRandom Forest:")
 print(pd.Series(forest_rmses).describe())
 
-# ============================================================================
 # 8. HYPERPARAMETER TUNING
-# VERBESSERUNG: Kleineres Grid für schnellere Ausführung
-# HAUPTPROBLEM BEHOBEN: .keys() gibt dict_keys zurück, nicht indexierbar!
-# ============================================================================
-print("\n" + "=" * 60)
-print("HYPERPARAMETER TUNING (Grid Search)")
-print("=" * 60)
 
 full_pipeline = Pipeline([
     ("preprocessing", preprocessing),
     ("random_forest", RandomForestRegressor(random_state=42)),
 ])
 
-# VERBESSERUNG: Kleineres Grid für schnellere Ausführung
 param_grid = [
-    {'preprocessing__geo__n_clusters': [5, 10],  # Reduziert von [5, 8, 10]
-     'random_forest__max_features': [4, 6]},     # Reduziert von [4, 6, 8]
+    {'preprocessing__geo__n_clusters': [5, 8, 10],
+     'random_forest__max_features': [4, 6, 8]},
+    {'preprocessing__geo__n_clusters': [10, 15],
+     'random_forest__max_features': [6, 8, 10]},
 ]
 
 grid_search = GridSearchCV(full_pipeline, param_grid, cv=3, 
                           scoring='neg_root_mean_squared_error',
-                          verbose=2)  # Verbose für Progress-Anzeige
+                          verbose=2)
 grid_search.fit(housing, housing_labels)
 
 print("\nBeste Parameter:")
 print(grid_search.best_params_)
 print(f"\nBester Score: {-grid_search.best_score_:.2f}")
 
-# BUGFIX: Das war das Problem! .keys() gibt dict_keys zurück, nicht indexierbar
-# Alte Zeile (FEHLER): print(str(full_pipeline.get_params().keys()[1000:] + "..."))
-# Neue Zeile (KORREKT):
 params_list = list(full_pipeline.get_params().keys())
 print(f"\nAnzahl verfügbarer Parameter: {len(params_list)}")
 print("Erste 10 Parameter:", params_list[:10])
 
-# ============================================================================
 # 9. FINALES MODELL AUF TEST SET
-# ============================================================================
-print("\n" + "=" * 60)
-print("FINALE EVALUATION AUF TEST SET")
-print("=" * 60)
 
 X_test = strat_test_set.drop("median_house_value", axis=1)
 y_test = strat_test_set["median_house_value"].copy()
@@ -227,19 +185,8 @@ final_predictions = grid_search.predict(X_test)
 final_rmse = root_mean_squared_error(y_test, final_predictions)
 print(f"\nFinaler Test RMSE: {final_rmse:.2f}")
 
-print("\n" + "=" * 60)
-print("FERTIG!")
-print("=" * 60)
-
-# ============================================================================
 # 10. SUPPORT VECTOR REGRESSION (SVR)
-# Nur auf ersten 5000 Samples wegen Performance, 3-fold CV
-# ============================================================================
-print("\n" + "=" * 60)
-print("SVR HYPERPARAMETER TUNING (auf 5000 Samples)")
-print("=" * 60)
 
-# Nur erste 5000 Samples für SVR (skaliert schlecht)
 housing_small = housing.iloc[:5000]
 housing_labels_small = housing_labels.iloc[:5000]
 
@@ -248,7 +195,6 @@ svr_pipeline = Pipeline([
     ("svr", SVR()),
 ])
 
-# Hyperparameter Grid für SVR
 param_distributions = [
     {
         'svr__kernel': ['linear'],
@@ -261,16 +207,15 @@ param_distributions = [
     },
 ]
 
-# RandomizedSearchCV statt GridSearchCV (schneller)
 random_search = RandomizedSearchCV(
     svr_pipeline,
     param_distributions,
-    n_iter=10,  # Nur 10 zufällige Kombinationen testen
-    cv=3,  # 3-fold CV wie empfohlen
+    n_iter=10,
+    cv=3,
     scoring='neg_root_mean_squared_error',
     verbose=2,
     random_state=42,
-    n_jobs=-1  # Parallelisierung
+    n_jobs=-1
 )
 
 print("\nTraining SVR (kann einige Minuten dauern)...")
@@ -287,9 +232,6 @@ svr_test_rmse = root_mean_squared_error(y_test, svr_test_pred)
 print(f"SVR Test RMSE: {svr_test_rmse:.2f}")
 
 # Vergleich mit Random Forest
-print("\n" + "=" * 60)
-print("VERGLEICH: SVR vs Random Forest")
-print("=" * 60)
 print(f"Random Forest Test RMSE: {final_rmse:.2f}")
 print(f"SVR Test RMSE:           {svr_test_rmse:.2f}")
 print(f"Differenz:               {svr_test_rmse - final_rmse:.2f}")
@@ -298,7 +240,3 @@ if svr_test_rmse < final_rmse:
     print("\n✓ SVR performt besser!")
 else:
     print("\n✗ Random Forest performt besser.")
-
-print("\n" + "=" * 60)
-print("ALLE AUFGABEN ABGESCHLOSSEN!")
-print("=" * 60)

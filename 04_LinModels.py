@@ -5,9 +5,8 @@ from sklearn.pipeline import make_pipeline
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 
-# ============================================================================
 # 1. LINEAR REGRESSION - Basis für alle linearen Modelle
-# ============================================================================
+
 rng = np.random.default_rng(seed=42)
 X = 2 * rng.random((200, 1))
 y = 4 + 3 * X + rng.standard_normal((200, 1))
@@ -15,19 +14,12 @@ y = 4 + 3 * X + rng.standard_normal((200, 1))
 lin_reg = LinearRegression()
 lin_reg.fit(X, y)
 
-print("=" * 60)
-print("LINEAR REGRESSION")
-print("=" * 60)
 print(f"Intercept: {lin_reg.intercept_[0]:.4f} (erwartet: 4)")
 print(f"Coefficient: {lin_reg.coef_[0][0]:.4f} (erwartet: 3)")
 
-# ============================================================================
+
 # 2. POLYNOMIAL REGRESSION - Für nicht-lineare Beziehungen
 # Wandelt x in [x, x², x³, ...] um, dann lineare Regression
-# ============================================================================
-print("\n" + "=" * 60)
-print("POLYNOMIAL REGRESSION")
-print("=" * 60)
 
 # Daten: y = 0.5x² + x + 2 + Noise
 X_poly = 6 * rng.random((200, 1)) - 3
@@ -46,12 +38,8 @@ for degree in [1, 2, 10]:
 
 print("Erwartet: ~2.0 | Degree 1: Underfitting | Degree 10: Overfitting")
 
-# ============================================================================
+
 # 3. REGULARIZATION - Verhindert Overfitting
-# ============================================================================
-print("\n" + "=" * 60)
-print("REGULARIZATION")
-print("=" * 60)
 
 # Kleine Datenmenge (anfällig für Overfitting)
 X_small = 3 * rng.random((20, 1))
@@ -73,14 +61,8 @@ for alpha in [0, 0.1, 1.0]:
 
 print("\nHöheres Alpha = stärkere Regularization = kleinere Coefficients")
 
-# ============================================================================
 # 4. LOGISTIC REGRESSION - Für Klassifikation (nicht Regression!)
 # Gibt Wahrscheinlichkeiten aus: P(y=1|X)
-# ============================================================================
-print("\n" + "=" * 60)
-print("LOGISTIC REGRESSION (Binary Classification)")
-print("=" * 60)
-
 # Iris Dataset: Virginica vs Rest
 iris = load_iris(as_frame=True)
 X = iris.data[["petal width (cm)"]].values
@@ -96,13 +78,8 @@ for width in [1.0, 1.5, 2.0]:
     pred = "Virginica" if proba >= 0.5 else "Nicht Virginica"
     print(f"Width={width:.1f}cm: P(Virginica)={proba:.2f} → {pred}")
 
-# ============================================================================
 # 5. SOFTMAX REGRESSION - Multiclass Classification
 # Logistic Regression für >2 Klassen
-# ============================================================================
-print("\n" + "=" * 60)
-print("SOFTMAX REGRESSION (Multiclass)")
-print("=" * 60)
 
 # Alle 3 Iris-Arten klassifizieren
 X = iris.data[["petal length (cm)", "petal width (cm)"]].values
@@ -126,13 +103,3 @@ for i, name in enumerate(iris.target_names):
 # Accuracy auf Test Set
 accuracy = softmax_reg.score(X_test, y_test)
 print(f"\nTest Accuracy: {accuracy:.2%}")
-
-print("\n" + "=" * 60)
-print("ZUSAMMENFASSUNG")
-print("=" * 60)
-print("Linear Regression:    y = wx + b")
-print("Polynomial:           Erweitert Features zu [x, x², x³, ...]")
-print("Ridge (L2):           Bestraft große Gewichte quadratisch")
-print("Lasso (L1):           Kann Features eliminieren (Coef → 0)")
-print("Logistic Regression:  Binary Classification mit Wahrscheinlichkeiten")
-print("Softmax:              Multiclass Classification")
