@@ -8,12 +8,7 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.model_selection import train_test_split
 
-# ============================================================================
 # 1. VOTING CLASSIFIER - Kombiniert verschiedene Modelle
-# ============================================================================
-print("=" * 60)
-print("VOTING CLASSIFIER")
-print("=" * 60)
 
 # Daten
 X, y = make_moons(n_samples=500, noise=0.30, random_state=42)
@@ -31,11 +26,11 @@ voting_hard = VotingClassifier(
 )
 voting_hard.fit(X_train, y_train)
 
-print("\nHard Voting (Mehrheitsentscheidung):")
+print("\nHard Voting:")
 for name, clf in voting_hard.named_estimators_.items():
     clf.fit(X_train, y_train)
     print(f"  {name}: {clf.score(X_test, y_test):.4f}")
-print(f"  Voting: {voting_hard.score(X_test, y_test):.4f} ← Oft besser!")
+print(f"  Voting: {voting_hard.score(X_test, y_test):.4f}")
 
 # Soft Voting: Durchschnitt der Wahrscheinlichkeiten
 voting_soft = VotingClassifier(
@@ -44,14 +39,9 @@ voting_soft = VotingClassifier(
 )
 voting_soft.fit(X_train, y_train)
 
-print(f"\nSoft Voting (Probability Average): {voting_soft.score(X_test, y_test):.4f}")
+print(f"\nSoft Voting: {voting_soft.score(X_test, y_test):.4f}")
 
-# ============================================================================
 # 2. BAGGING - Bootstrap Aggregating
-# ============================================================================
-print("\n" + "=" * 60)
-print("BAGGING (Bootstrap Aggregating)")
-print("=" * 60)
 
 # Einzelner Decision Tree (Overfitting)
 tree_clf = DecisionTreeClassifier(random_state=42)
@@ -67,8 +57,8 @@ bag_clf = BaggingClassifier(
 )
 bag_clf.fit(X_train, y_train)
 
-print(f"\nEinzelner Tree: {tree_clf.score(X_test, y_test):.4f}")
-print(f"Bagging (500 Trees): {bag_clf.score(X_test, y_test):.4f} ← Besser!")
+print(f"Single Tree: {tree_clf.score(X_test, y_test):.4f}")
+print(f"Bagging (500 Trees): {bag_clf.score(X_test, y_test):.4f}")
 
 # Out-of-Bag Evaluation (kostenlose Validation)
 bag_clf_oob = BaggingClassifier(
@@ -82,19 +72,14 @@ bag_clf_oob.fit(X_train, y_train)
 
 print(f"\nOOB Score: {bag_clf_oob.oob_score_:.4f}")
 print(f"Test Score: {bag_clf_oob.score(X_test, y_test):.4f}")
-print("Hinweis: OOB Score ≈ Test Score (ohne extra Validation Set!)")
+print("OOB Score ≈ Test Score")
 
-# ============================================================================
 # 3. RANDOM FOREST - Bagging + Random Feature Selection
-# ============================================================================
-print("\n" + "=" * 60)
-print("RANDOM FOREST")
-print("=" * 60)
 
 # Random Forest = Bagging + max_features
 rf_clf = RandomForestClassifier(
     n_estimators=500,
-    max_leaf_nodes=16,  # Regularization
+    max_leaf_nodes=16,
     n_jobs=-1,
     random_state=42
 )
@@ -112,12 +97,7 @@ print("\nFeature Importances (Iris):")
 for score, name in zip(rf_iris.feature_importances_, iris.data.columns):
     print(f"  {name:20s}: {score:.3f}")
 
-# ============================================================================
 # 4. ADABOOST - Adaptive Boosting
-# ============================================================================
-print("\n" + "=" * 60)
-print("ADABOOST (Adaptive Boosting)")
-print("=" * 60)
 
 # AdaBoost: Fokussiert auf schwierige Samples
 ada_clf = AdaBoostClassifier(
@@ -129,15 +109,8 @@ ada_clf = AdaBoostClassifier(
 ada_clf.fit(X_train, y_train)
 
 print(f"\nAdaBoost: {ada_clf.score(X_test, y_test):.4f}")
-print("Prinzip: Jeder Tree fokussiert auf Fehler des vorherigen")
 
-# ============================================================================
 # 5. GRADIENT BOOSTING - Für Regression
-# ============================================================================
-print("\n" + "=" * 60)
-print("GRADIENT BOOSTING (Regression)")
-print("=" * 60)
-
 # Daten: y = 3x² + noise
 m = 100
 rng = np.random.default_rng(seed=42)
@@ -161,7 +134,7 @@ tree3.fit(X_reg, y3)
 # Finale Vorhersage: Summe aller Trees
 X_new = np.array([[-0.4], [0.], [0.5]])
 y_pred = sum(tree.predict(X_new) for tree in (tree1, tree2, tree3))
-print(f"\nManuelle Gradient Boosting Predictions: {y_pred}")
+print(f"\Manual Gradient Boosting Predictions: {y_pred}")
 
 # Scikit-Learn Gradient Boosting
 gbrt = GradientBoostingRegressor(
@@ -173,59 +146,16 @@ gbrt = GradientBoostingRegressor(
 gbrt.fit(X_reg, y_reg)
 print(f"Scikit-Learn Predictions: {gbrt.predict(X_new)}")
 
-# Mit Early Stopping
+# With Early Stopping
 gbrt_best = GradientBoostingRegressor(
     max_depth=2,
     learning_rate=0.05,
     n_estimators=500,
-    n_iter_no_change=10,  # Early stopping
+    n_iter_no_change=10,
     random_state=42
 )
 gbrt_best.fit(X_reg, y_reg)
-print(f"\nMit Early Stopping: {gbrt_best.n_estimators_} Trees verwendet (von 500)")
-
-# ============================================================================
-# ZUSAMMENFASSUNG
-# ============================================================================
-print("\n" + "=" * 60)
-print("ZUSAMMENFASSUNG")
-print("=" * 60)
-
-print("""
-Ensemble Methods:
-
-1. VOTING
-   - Kombiniert verschiedene Modelle
-   - Hard: Mehrheitsentscheidung
-   - Soft: Durchschnitt der Wahrscheinlichkeiten
-   - Gut wenn Modelle unterschiedlich sind
-
-2. BAGGING (Bootstrap Aggregating)
-   - Trainiert gleiche Modelle auf verschiedenen Subsets
-   - Reduziert Variance (Overfitting)
-   - OOB Score: Kostenlose Validation
-   - Parallelisierbar
-
-3. RANDOM FOREST
-   - Bagging + Random Feature Selection
-   - Jeder Split: Nur Subset der Features
-   - Mehr Diversität → Bessere Performance
-   - Feature Importances verfügbar
-
-4. BOOSTING
-   - Sequentiell: Jeder Learner korrigiert vorherigen
-   - AdaBoost: Fokussiert auf schwierige Samples
-   - Gradient Boosting: Lernt Residuals
-   - Reduziert Bias (Underfitting)
-   - NICHT parallelisierbar
-
-Wann was verwenden?
-✅ Overfitting → Bagging/Random Forest
-✅ Underfitting → Boosting (AdaBoost/Gradient Boosting)
-✅ Verschiedene Modelle → Voting
-✅ Schnell & gut → Random Forest (Default-Wahl)
-✅ Beste Performance → Gradient Boosting (aber langsamer)
-""")
+print(f"\nWith Early Stopping: {gbrt_best.n_estimators_} Trees used (of 500)")
 
 ### Exercises:
 from sklearn.datasets import fetch_openml

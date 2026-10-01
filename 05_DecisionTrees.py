@@ -2,12 +2,7 @@ import numpy as np
 from sklearn.datasets import load_iris, make_moons
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
-# ============================================================================
 # 1. DECISION TREE CLASSIFICATION - Iris Dataset
-# ============================================================================
-print("=" * 60)
-print("DECISION TREE CLASSIFICATION")
-print("=" * 60)
 
 # Iris Dataset laden
 iris = load_iris(as_frame=True)
@@ -33,13 +28,7 @@ print(f"Depth: {tree_clf.tree_.max_depth}")
 print(f"Nodes: {tree_clf.tree_.node_count}")
 print(f"Leaves: {tree_clf.tree_.n_leaves}")
 
-# ============================================================================
 # 2. OVERFITTING VERMEIDEN - Regularization Parameter
-# ============================================================================
-print("\n" + "=" * 60)
-print("REGULARIZATION (Overfitting vermeiden)")
-print("=" * 60)
-
 # Make Moons Dataset (nicht-linear)
 X_moons, y_moons = make_moons(n_samples=150, noise=0.2, random_state=42)
 
@@ -66,12 +55,7 @@ print(f"  Nodes: {tree_regularized.tree_.node_count}")
 
 print("\nHinweis: Regularisierter Tree hat bessere Test Accuracy!")
 
-# ============================================================================
 # 3. DECISION TREE REGRESSION
-# ============================================================================
-print("\n" + "=" * 60)
-print("DECISION TREE REGRESSION")
-print("=" * 60)
 
 # Quadratische Daten generieren: y = x²
 rng = np.random.default_rng(seed=42)
@@ -98,12 +82,7 @@ for x in test_points:
 print(f"\nTree 1 (depth=2): {tree_reg1.tree_.node_count} nodes")
 print(f"Tree 2 (depth=3): {tree_reg2.tree_.node_count} nodes")
 
-# ============================================================================
 # 4. REGULARIZATION PARAMETER
-# ============================================================================
-print("\n" + "=" * 60)
-print("WICHTIGE HYPERPARAMETER")
-print("=" * 60)
 
 print("""
 Regularization Parameter (verhindern Overfitting):
@@ -132,12 +111,7 @@ Regularization Parameter (verhindern Overfitting):
    - Erhöht Diversität (wichtig für Random Forests)
    - Default: None (alle Features)""")
 
-# ============================================================================
 # 5. PRAKTISCHES BEISPIEL - Verschiedene Konfigurationen
-# ============================================================================
-print("=" * 60)
-print("VERGLEICH VERSCHIEDENER KONFIGURATIONEN")
-print("=" * 60)
 
 configs = [
     ("Default (Overfitting)", {}),
@@ -154,29 +128,6 @@ for name, params in configs:
     
     print(f"\n{name}:")
     print(f"  Train: {train_acc:.4f} | Test: {test_acc:.4f} | Nodes: {tree.tree_.node_count}")
-
-# ============================================================================
-# ZUSAMMENFASSUNG
-# ============================================================================
-print("\n" + "=" * 60)
-print("ZUSAMMENFASSUNG")
-print("=" * 60)
-print("""
-Decision Trees:
-✅ Einfach zu verstehen und interpretieren
-✅ Wenig Data Preprocessing nötig (kein Scaling)
-✅ Funktioniert mit numerischen und kategorischen Daten
-✅ Kann nicht-lineare Beziehungen lernen
-
-❌ Anfällig für Overfitting (ohne Regularization)
-❌ Instabil (kleine Datenänderung → anderer Baum)
-❌ Nicht gut für lineare Beziehungen
-❌ Bias zu Features mit vielen Werten
-
-Best Practices:
-🎯 Immer max_depth oder min_samples_leaf setzen
-🎯 Cross-Validation für Hyperparameter-Tuning
-🎯 Für Produktion: Random Forests statt einzelner Tree""")
 
 from sklearn.datasets import make_moons
 from sklearn.model_selection import train_test_split
@@ -216,7 +167,7 @@ for tree, (X_mini_train, y_mini_train) in zip(forest, mini_sets):
     tree.fit(X_mini_train, y_mini_train)
     y_pred = tree.predict(X_test)
     accuracy_scores.append(accuracy_score(y_test, y_pred))
-np.mean(accuracy_scores)
+print(np.mean(accuracy_scores))
 
 Y_pred = np.empty([n_trees, len(X_test)], dtype=np.uint8)
 for tree_index, tree in enumerate(forest):
