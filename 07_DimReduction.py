@@ -13,46 +13,33 @@ from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from sklearn.pipeline import make_pipeline
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
-# ============================================================================
 # 1. PCA - Principal Component Analysis
-# ============================================================================
-print("="*60)
-print("PCA - PRINCIPAL COMPONENT ANALYSIS")
-print("="*60)
-
-# MNIST Dataset laden
+# load MNIST Dataset
 mnist = fetch_openml("mnist_784", as_frame=False, parser='auto')
 
 X_train, y_train = mnist.data[:60000], mnist.target[:60000]
 X_test, y_test = mnist.data[60000:], mnist.target[60000:]
 
-# PCA: Finde Dimensionen für 95% Varianz
+# PCA: Find dimensionen for 95% variance
 pca = PCA()
 pca.fit(X_train)
 cumsum = np.cumsum(pca.explained_variance_ratio_)
 d = np.argmax(cumsum >= 0.95) + 1
-print(f"\nDimensionen für 95% Varianz: {d} (von 784)")
+print(f"\nDimensions for 95% variance: {d} (von 784)")
 
-# Direkt mit n_components=0.95
 pca = PCA(n_components=0.95)
 X_reduced = pca.fit_transform(X_train)
-print(f"Komponenten: {pca.n_components_}")
-print(f"Erklärte Varianz: {pca.explained_variance_ratio_.sum():.4f}")
+print(f"Components: {pca.n_components_}")
+print(f"Explained Variance: {pca.explained_variance_ratio_.sum():.4f}")
 
 # Rekonstruktion
 X_recovered = pca.inverse_transform(X_reduced)
 print(f"Original Shape: {X_train.shape}")
-print(f"Reduziert: {X_reduced.shape}")
-print(f"Rekonstruiert: {X_recovered.shape}")
+print(f"Reduced: {X_reduced.shape}")
+print(f"Reconstructed: {X_recovered.shape}")
 
-# ============================================================================
 # 2. INCREMENTAL PCA - Für große Datasets
-# ============================================================================
-print("\n" + "="*60)
-print("INCREMENTAL PCA")
-print("="*60)
-
-# Batch-weise Training
+# Batchwise Ttaining
 n_batches = 100
 inc_pca = IncrementalPCA(n_components=154)
 for X_batch in np.array_split(X_train, n_batches):
@@ -60,15 +47,8 @@ for X_batch in np.array_split(X_train, n_batches):
 
 X_reduced_inc = inc_pca.transform(X_train)
 print(f"\nIncremental PCA Shape: {X_reduced_inc.shape}")
-print("Vorteil: Passt in Memory bei großen Datasets")
 
-# ============================================================================
 # 3. RANDOM PROJECTION - Schnelle Dimensionsreduktion
-# ============================================================================
-print("\n" + "="*60)
-print("RANDOM PROJECTION")
-print("="*60)
-
 m, ε = 5_000, 0.1
 n = 20000
 rng = np.random.default_rng(seed=42)
@@ -77,32 +57,19 @@ X = rng.standard_normal((m, n))
 gaussian_rnd_proj = GaussianRandomProjection(eps=ε, random_state=42)
 X_reduced_rp = gaussian_rnd_proj.fit_transform(X)
 print(f"\nOriginal: {X.shape}")
-print(f"Reduziert: {X_reduced_rp.shape}")
-print(f"Epsilon (Fehlertoleranz): {ε}")
-print("Vorteil: Sehr schnell, keine Fit-Zeit")
+print(f"Reduced: {X_reduced_rp.shape}")
+print(f"Epsilon: {ε}")
 
-# ============================================================================
 # 4. LLE - Locally Linear Embedding
-# ============================================================================
-print("\n" + "="*60)
-print("LLE - LOCALLY LINEAR EMBEDDING")
-print("="*60)
-
 X_swiss, t = make_swiss_roll(n_samples=1000, noise=0.2, random_state=42)
 lle = LocallyLinearEmbedding(n_components=2, n_neighbors=10, random_state=42)
 X_unrolled = lle.fit_transform(X_swiss)
 
 print(f"\nSwiss Roll: {X_swiss.shape}")
-print(f"Entrollt: {X_unrolled.shape}")
-print("LLE: Erhält lokale Struktur (Manifold Learning)")
+print(f"Unrolled: {X_unrolled.shape}")
+print("LLE: Contains local Structure (Manifold Learning)")
 
-# ============================================================================
 # 5. ANDERE MANIFOLD LEARNING METHODEN
-# ============================================================================
-print("\n" + "="*60)
-print("MANIFOLD LEARNING VERGLEICH")
-print("="*60)
-
 # MDS - Multidimensional Scaling
 mds = MDS(n_components=2, normalized_stress=False, random_state=42)
 X_mds = mds.fit_transform(X_swiss)
@@ -118,67 +85,12 @@ tsne = TSNE(n_components=2, init="random", learning_rate="auto", random_state=42
 X_tsne = tsne.fit_transform(X_swiss)
 print(f"t-SNE: {X_tsne.shape}")
 
-# ============================================================================
 # 6. KERNEL PCA - Nichtlineare Dimensionsreduktion
-# ============================================================================
-print("\n" + "="*60)
-print("KERNEL PCA")
-print("="*60)
-
 # RBF Kernel
 rbf_pca = KernelPCA(n_components=2, kernel="rbf", gamma=0.04, random_state=42)
 X_kpca = rbf_pca.fit_transform(X_swiss)
 print(f"\nKernel PCA (RBF): {X_kpca.shape}")
-print("Kernel: Kann nichtlineare Strukturen erfassen")
-
-# ============================================================================
-# ZUSAMMENFASSUNG
-# ============================================================================
-print("\n" + "="*60)
-print("ZUSAMMENFASSUNG")
-print("="*60)
-
-print("""
-Dimensionsreduktion:
-
-1. PCA (Principal Component Analysis)
-   - Linear, schnell, interpretierbar
-   - Maximiert Varianz
-   - Gut für: Kompression, Noise Reduction
-
-2. Incremental PCA
-   - Wie PCA, aber batch-weise
-   - Gut für: Große Datasets (nicht in Memory)
-
-3. Random Projection
-   - Sehr schnell, keine Fit-Zeit
-   - Johnson-Lindenstrauss Lemma
-   - Gut für: Schnelle Approximation
-
-4. LLE (Locally Linear Embedding)
-   - Manifold Learning
-   - Erhält lokale Struktur
-   - Gut für: Nichtlineare Manifolds
-
-5. MDS, Isomap, t-SNE
-   - MDS: Erhält Distanzen
-   - Isomap: Geodätische Distanzen
-   - t-SNE: Visualisierung, Cluster
-
-6. Kernel PCA
-   - Nichtlinear durch Kernel Trick
-   - RBF, Polynomial, Sigmoid
-   - Gut für: Komplexe nichtlineare Strukturen
-
-Wann was verwenden?
-✅ Schnell & Linear → PCA
-✅ Große Daten → Incremental PCA
-✅ Sehr schnell → Random Projection
-✅ Manifolds → LLE, Isomap
-✅ Visualisierung → t-SNE
-✅ Nichtlinear → Kernel PCA
-""")
-
+print("Kernel: Can capture nonlinear structures")
 
 ### Exercises:
 rnd_clf = RandomForestClassifier(n_estimators=100, random_state=42)
@@ -329,4 +241,3 @@ time_lda = time.time() - start
 print(time_lda)
 plot_digits(X_lda_reduced, y_sample, figsize=(12, 12))
 plt.show()
-

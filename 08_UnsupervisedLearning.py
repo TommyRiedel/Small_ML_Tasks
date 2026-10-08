@@ -2,22 +2,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.cluster import (KMeans, MiniBatchKMeans, DBSCAN, 
                              SpectralClustering, AgglomerativeClustering)
-from sklearn.datasets import make_blobs, fetch_openml, load_digits, make_moons
+from sklearn.datasets import make_blobs, fetch_openml, load_digits, make_moons, get_data_home, fetch_olivetti_faces
 from sklearn.metrics import silhouette_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
+from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.decomposition import PCA
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import make_pipeline
 from pathlib import Path
 import urllib.request
 import PIL
 
-# ============================================================================
 # 1. K-MEANS CLUSTERING - Basic Example
-# ============================================================================
-print("="*60)
-print("K-MEANS CLUSTERING")
-print("="*60)
-
 # Generate blob data with 5 clusters
 blob_centers = np.array([[0.2, 2.3], [-1.5, 2.3], [-2.8, 1.8], [-2.8, 2.8], [-2.8, 1.3]])
 blob_std = np.array([0.4, 0.3, 0.1, 0.1, 0.1])
@@ -36,13 +34,7 @@ X_new = np.array([[0, 2], [3, 2], [-3, 3], [-3, 2.5]])
 print(f"\nPredictions for new points: {kmeans.predict(X_new)}")
 print(f"Distances to centroids:\n{kmeans.transform(X_new).round(2)}")
 
-# ============================================================================
 # 2. FINDING OPTIMAL K - Elbow Method & Silhouette Score
-# ============================================================================
-print("\n" + "="*60)
-print("FINDING OPTIMAL K")
-print("="*60)
-
 # Try different values of k
 kmeans_per_k = [KMeans(n_clusters=k, random_state=43).fit(X) for k in range(1, 10)]
 inertias = [model.inertia_ for model in kmeans_per_k]
@@ -61,13 +53,7 @@ for k, score in enumerate(silhouette_scores, 2):
 best_k = silhouette_scores.index(max(silhouette_scores)) + 2
 print(f"\nBest k based on silhouette score: {best_k}")
 
-# ============================================================================
 # 3. MINI-BATCH K-MEANS - For Large Datasets
-# ============================================================================
-print("\n" + "="*60)
-print("MINI-BATCH K-MEANS")
-print("="*60)
-
 # Mini-Batch K-Means is faster for large datasets
 minibatch_kmeans = MiniBatchKMeans(n_clusters=5, random_state=42)
 minibatch_kmeans.fit(X)
@@ -86,13 +72,7 @@ minibatch_kmeans = MiniBatchKMeans(n_clusters=10, batch_size=10, random_state=42
 minibatch_kmeans.fit(X_memmap)
 print(f"MNIST Mini-Batch K-Means trained on {len(X_train)} samples")
 
-# ============================================================================
 # 4. IMAGE SEGMENTATION - Color Quantization
-# ============================================================================
-print("\n" + "="*60)
-print("IMAGE SEGMENTATION")
-print("="*60)
-
 # Download and load ladybug image
 homlp_root = "https://github.com/ageron/handson-mlp/raw/main/"
 filename = "ladybug.png"
@@ -114,13 +94,7 @@ for n_clusters in n_colors:
     segmented_img = kmeans.cluster_centers_[kmeans.labels_]
     print(f"Reduced to {n_clusters} colors")
 
-# ============================================================================
 # 5. SEMI-SUPERVISED LEARNING - Label Propagation
-# ============================================================================
-print("\n" + "="*60)
-print("SEMI-SUPERVISED LEARNING")
-print("="*60)
-
 # Load digits dataset
 X_digits, y_digits = load_digits(return_X_y=True)
 X_train_dig, y_train_dig = X_digits[:1400], y_digits[:1400]
@@ -191,13 +165,7 @@ print(f"Partial propagation (50%): {score_partial:.4f}")
 accuracy_propagated = (y_train_partial == y_train_dig[partially_propagated]).mean()
 print(f"Propagation accuracy: {accuracy_propagated:.4f}")
 
-# ============================================================================
 # 6. DBSCAN - Density-Based Clustering
-# ============================================================================
-print("\n" + "="*60)
-print("DBSCAN - DENSITY-BASED CLUSTERING")
-print("="*60)
-
 # DBSCAN can find arbitrary-shaped clusters and detect outliers
 X_moons, y_moons = make_moons(n_samples=1000, noise=0.05, random_state=42)
 
@@ -222,13 +190,7 @@ X_new = np.array([[-0.5, 0], [0, 0.5], [1, -0.1], [2, 1]])
 print(f"\nPredictions for new points: {knn.predict(X_new)}")
 print(f"Prediction probabilities:\n{knn.predict_proba(X_new)}")
 
-# ============================================================================
 # 7. SPECTRAL CLUSTERING - Graph-Based Clustering
-# ============================================================================
-print("\n" + "="*60)
-print("SPECTRAL CLUSTERING")
-print("="*60)
-
 # Spectral clustering uses graph theory (similarity matrix)
 sc1 = SpectralClustering(n_clusters=2, gamma=100, random_state=42)
 sc1.fit(X_moons)
@@ -238,13 +200,7 @@ sc2 = SpectralClustering(n_clusters=2, gamma=1, random_state=42)
 sc2.fit(X_moons)
 print(f"Spectral Clustering (gamma=1) labels: {sc2.labels_[:10]}")
 
-# ============================================================================
 # 8. AGGLOMERATIVE CLUSTERING - Hierarchical Clustering
-# ============================================================================
-print("\n" + "="*60)
-print("AGGLOMERATIVE CLUSTERING")
-print("="*60)
-
 # Hierarchical clustering builds a tree (dendrogram)
 X_simple = np.array([0, 2, 5, 8.5]).reshape(-1, 1)
 agg = AgglomerativeClustering(linkage="complete").fit(X_simple)
@@ -253,13 +209,7 @@ print(f"\nChildren (merge history): {agg.children_}")
 print(f"Number of clusters: {agg.n_clusters_}")
 print(f"Labels: {agg.labels_}")
 
-# ============================================================================
 # 9. GAUSSIAN MIXTURE MODELS - Probabilistic Clustering
-# ============================================================================
-print("\n" + "="*60)
-print("GAUSSIAN MIXTURE MODELS")
-print("="*60)
-
 # GMM assumes data comes from mixture of Gaussian distributions
 X1, y1 = make_blobs(n_samples=1000, centers=((4, -4), (0, 0)), random_state=42)
 X1 = X1.dot(np.array([[0.374, 0.95], [0.732, 0.598]]))
@@ -291,13 +241,7 @@ density_threshold = np.percentile(densities, 2)
 anomalies = X_gmm[densities < density_threshold]
 print(f"\nNumber of anomalies (bottom 2%): {len(anomalies)}")
 
-# ============================================================================
 # 10. MODEL SELECTION - BIC & AIC
-# ============================================================================
-print("\n" + "="*60)
-print("MODEL SELECTION - BIC & AIC")
-print("="*60)
-
 # BIC (Bayesian Information Criterion) and AIC (Akaike Information Criterion)
 # Lower is better - penalizes model complexity
 print(f"\nBIC: {gm.bic(X_gmm):.2f}")
@@ -318,13 +262,7 @@ best_k_aic = aics.index(min(aics)) + 1
 print(f"\nBest k (BIC): {best_k_bic}")
 print(f"Best k (AIC): {best_k_aic}")
 
-# ============================================================================
 # 11. BAYESIAN GAUSSIAN MIXTURE - Automatic Component Selection
-# ============================================================================
-print("\n" + "="*60)
-print("BAYESIAN GAUSSIAN MIXTURE")
-print("="*60)
-
 # Bayesian GMM automatically determines optimal number of components
 bgm = BayesianGaussianMixture(n_components=10, n_init=10, max_iter=500, random_state=42)
 bgm.fit(X_gmm)
@@ -333,62 +271,130 @@ bgm.fit(X_gmm)
 print(f"\nWeights: {bgm.weights_.round(2)}")
 print(f"Non-zero components: {(bgm.weights_ > 0.01).sum()}")
 
-# ============================================================================
-# SUMMARY
-# ============================================================================
-print("\n" + "="*60)
-print("SUMMARY")
-print("="*60)
+### Exercises:
 
-print("""
-Clustering Algorithms:
+# Load the Olivetti faces dataset
+data_home = Path(get_data_home())
+data_home.mkdir(parents=True, exist_ok=True)
+local_file_path = data_home / "olivetti_py3.pkz"
+if not local_file_path.exists():
+    url = "https://github.com/ageron/data/raw/refs/heads/main/olivetti_py3.pkz"
+    print(f"Downloading Olivetti faces from {url} to {local_file_path}\n")
+    urllib.request.urlretrieve(url, local_file_path)
 
-1. K-MEANS
-   - Fast, scalable
-   - Assumes spherical clusters
-   - Must specify k
-   - Use: Large datasets, known k
+olivetti = fetch_olivetti_faces()
 
-2. MINI-BATCH K-MEANS
-   - Faster than K-Means
-   - Uses mini-batches
-   - Use: Very large datasets
+# Splitting the dataset into training and test sets using StratifiedShuffleSplit
+strat_split = StratifiedShuffleSplit(n_splits=1, test_size=40, random_state=42)
+train_valid_idx, test_idx = next(strat_split.split(olivetti.data,
+                                                   olivetti.target))
+X_train_valid = olivetti.data[train_valid_idx]
+y_train_valid = olivetti.target[train_valid_idx]
+X_test = olivetti.data[test_idx]
+y_test = olivetti.target[test_idx]
 
-3. DBSCAN
-   - Finds arbitrary-shaped clusters
-   - Detects outliers
-   - No need to specify k
-   - Use: Non-spherical clusters, outliers
+strat_split = StratifiedShuffleSplit(n_splits=1, test_size=80, random_state=43)
+train_idx, valid_idx = next(strat_split.split(X_train_valid, y_train_valid))
+X_train = X_train_valid[train_idx]
+y_train = y_train_valid[train_idx]
+X_valid = X_train_valid[valid_idx]
+y_valid = y_train_valid[valid_idx]
 
-4. SPECTRAL CLUSTERING
-   - Graph-based
-   - Good for non-convex clusters
-   - Slow for large datasets
-   - Use: Complex cluster shapes
+print(f"Training set:   {X_train.shape[0]} samples")
+print(f"Validation set: {X_valid.shape[0]} samples")
+print(f"Test set:       {X_test.shape[0]} samples")
 
-5. AGGLOMERATIVE CLUSTERING
-   - Hierarchical (dendrogram)
-   - No need to specify k upfront
-   - Slow for large datasets
-   - Use: Hierarchical structure
+# Reducing dimensionality with PCA for visualization
+pca = PCA(0.99)
+X_train_pca = pca.fit_transform(X_train)
+X_valid_pca = pca.transform(X_valid)
+X_test_pca = pca.transform(X_test)
 
-6. GAUSSIAN MIXTURE MODELS
-   - Probabilistic (soft clustering)
-   - Can generate new samples
-   - Anomaly detection
-   - Use: Overlapping clusters, probabilities
+print(f"Number of components for 99% variance: {pca.n_components_}")
 
-7. BAYESIAN GMM
-   - Automatic component selection
-   - Regularizes weights
-   - Use: Unknown number of clusters
+# Clustering using K-Means and ensuring that the number of clusters is appropriate
+k_range = range(5, 150, 5)
+kmeans_per_k = []
+for k in k_range:
+    print(f"k={k}")
+    kmeans = KMeans(n_clusters=k, random_state=42)
+    kmeans.fit(X_train_pca)
+    kmeans_per_k.append(kmeans)
 
-Choosing the Right Algorithm:
-✅ Known k, spherical clusters → K-Means
-✅ Very large data → Mini-Batch K-Means
-✅ Arbitrary shapes, outliers → DBSCAN
-✅ Complex shapes → Spectral Clustering
-✅ Hierarchical structure → Agglomerative
-✅ Soft clustering, probabilities → GMM
-✅ Unknown k → DBSCAN, Bayesian GMM
-""")
+silhouette_scores = [silhouette_score(X_train_pca, model.labels_)
+                     for model in kmeans_per_k]
+best_index = np.argmax(silhouette_scores)
+best_k = k_range[best_index]
+best_score = silhouette_scores[best_index]
+
+best_model = kmeans_per_k[best_index]
+
+print(f"Best k: {best_k} (Silhouette Score: {best_score:.4f})")
+
+# --- Classification: Random Forest auf PCA-Features ---
+# Baseline: nur PCA-Features
+clf = RandomForestClassifier(n_estimators=150, random_state=42)
+clf.fit(X_train_pca, y_train)
+print(f"\nRandom Forest (only PCA):       {clf.score(X_valid_pca, y_valid):.4f}")
+
+# Dimensionality reduction using K-Means and train classifier on the reduced data
+
+X_train_reduced = best_model.transform(X_train_pca)
+X_valid_reduced = best_model.transform(X_valid_pca)
+X_test_reduced = best_model.transform(X_test_pca)
+
+clf = RandomForestClassifier(n_estimators=150, random_state=42)
+clf.fit(X_train_reduced, y_train)
+print(f"Random Forest (only K-Means):   {clf.score(X_valid_reduced, y_valid):.4f}")
+
+# Pipeline: K-Means + Random Forest fuer verschiedene k
+print("\nPipeline K-Means + Random Forest:")
+for n_clusters in k_range:
+    pipeline = make_pipeline(
+        KMeans(n_clusters=n_clusters, random_state=42),
+        RandomForestClassifier(n_estimators=150, random_state=42)
+    )
+    pipeline.fit(X_train_pca, y_train)
+    print(f"  k={n_clusters}: {pipeline.score(X_valid_pca, y_valid):.4f}")
+
+# Kombination: PCA + K-Means Features zusammen (beste Variante)
+X_train_extended = np.c_[X_train_pca, X_train_reduced]
+X_valid_extended = np.c_[X_valid_pca, X_valid_reduced]
+X_test_extended = np.c_[X_test_pca, X_test_reduced]
+
+clf = RandomForestClassifier(n_estimators=150, random_state=42)
+clf.fit(X_train_extended, y_train)
+print(f"\nRandom Forest (PCA + K-Means): {clf.score(X_valid_extended, y_valid):.4f}")
+print(f"Test set score:                {clf.score(X_test_extended, y_test):.4f}")
+
+# Train Gaussian Mixture Model on the PCA-reduced data and predict the labels
+
+gm = GaussianMixture(n_components=40, random_state=42)
+gm.fit(X_train_pca)
+
+gen_faces_reduced, y_gen_faces = gm.sample(n_samples=20)
+gen_faces = pca.inverse_transform(gen_faces_reduced)
+
+# Create "bad" faces through rotation, flipping and darkening
+n_rotated, n_flipped, n_darkened = 4, 3, 3
+
+rotated = np.transpose(X_train[:n_rotated].reshape(-1, 64, 64), axes=[0, 2, 1]).reshape(-1, 64*64)
+flipped = X_train[:n_flipped].reshape(-1, 64, 64)[:, ::-1].reshape(-1, 64*64)
+darkened = X_train[:n_darkened].copy(); darkened[:, 1:-1] *= 0.3
+
+X_bad_faces = np.r_[rotated, flipped, darkened]
+y_bad = np.concatenate([y_train[:n_rotated], y_train[:n_flipped], y_train[:n_darkened]])
+
+X_bad_faces_pca = pca.transform(X_bad_faces)
+print(f"\nGMM Log-Likelihood (manipulated): {gm.score_samples(X_bad_faces_pca).round(1)}")
+print(f"GMM Log-Likelihood (normal):      {gm.score_samples(X_train_pca[:10]).round(1)}")
+
+# Methode 2: PCA Reconstruction Error
+# Anomalies are reconstructed less well -> higher MSE
+def reconstruction_errors(pca, X):
+    """Calculates the mean squared reconstruction error for each sample."""
+    X_reconstructed = pca.inverse_transform(pca.transform(X))
+    return np.square(X_reconstructed - X).mean(axis=-1)
+
+print(f"\nMean reconstruction error: {reconstruction_errors(pca, X_train).mean()}")
+print(f"Mean reconstruction error for bad faces: {reconstruction_errors(pca, X_bad_faces).mean()}")
