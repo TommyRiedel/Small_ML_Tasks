@@ -1,73 +1,34 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torchmetrics
+import torchvision
+import torchvision.transforms.v2 as T
 import numpy as np
-import time
+import matplotlib.pyplot as plt
+import optuna
+from torch.utils.data import TensorDataset, DataLoader, random_split
+from sklearn.datasets import fetch_california_housing, fetch_covtype
+from sklearn.model_selection import train_test_split
+from functools import partial
 
-X = torch.tensor([[1.0, 4.0, 7.0], [2.0, 3.0, 6.0]])
-print(X)
-print(X.shape)
-print(X.dtype)
-print(X[0, 1])
-print(X[:, 1])
-
-print(10 * (X + 1.0))
-print(X.exp())
-print(X.mean())
-print(X.max(dim=0))
-print(X@X.T)
-
-print(X.numpy())
-print(torch.tensor(np.array([[1., 4., 7.], [2., 3., 6.]])))
-print(torch.tensor(np.array([[1., 4., 7.], [2., 3., 6.]]), dtype=torch.float32))
-print(torch.FloatTensor([[1., 4., 7.], [2., 3., 6.]]))
-X[:, 1] = -99
-print(X)
-
-X.relu_()
-print(X)
-
+# ── Device Setup ──────────────────────────────────────────────────────────────
+# Automatically select the best available device: CUDA (NVIDIA GPU) > MPS (Apple Silicon) > CPU
 if torch.cuda.is_available():
     device = "cuda"
 elif torch.backends.mps.is_available():
     device = "mps"
 else:
     device = "cpu"
-print(device)
+print(f"Using device: {device}")
 
-M = torch.tensor([[1., 2., 3.], [4., 5., 6.]])
-M = M.to(device)
-print(M.device)
-M = torch.tensor([[1., 2., 3.], [4., 5., 6.]], device=device)
-R = M @ M.T
-print(R)
+n_epochs = 20
 
-M = torch.rand(1000, 1000)
-start = time.time()
-M @ M.T
-time_cpu = time.time() - start
-print(f"CPU Time: {time_cpu:.4f} seconds")
+# 1. LOW-LEVEL PYTORCH: Manual Gradient Descent with Autograd
+# PyTorch tracks all operations on tensors with requires_grad=True. Calling .backward() computes gradients via the chain rule automatically.
+# This is the foundation of all neural network training.
 
-M = torch.rand(1000, 1000, device="mps")
-start = time.time()
-M @ M.T
-time_gpu = time.time() - start
-print(f"GPU Time: {time_gpu:.4f} seconds")
-print(f"GPU is {time_cpu / time_gpu:.2f} times faster than CPU")
-
-### Autograd
-learning_rate = 0.1
-x = torch.tensor(5.0, requires_grad=True)
-for iteration in range(100):
-    f = x ** 2  # forward pass
-    f.backward()  # backward pass
-    with torch.no_grad():
-        x -= learning_rate * x.grad  # gradient descent step
-    x.grad.zero_()  # reset the gradients
-print(x)
-
-######
-from sklearn.datasets import fetch_california_housing
-from sklearn.model_selection import train_test_split
-
+# ── Data Preparation ──────────────────────────────────────────────────────────
 try:
     housing = fetch_california_housing()
 except Exception as e:
@@ -81,40 +42,52 @@ except Exception as e:
     housing = Housing(X_data, y_data)
 
 X_train_full, X_test, y_train_full, y_test = train_test_split(
-    housing.data, housing.target, random_state=42
-)
+    housing.data, housing.target, random_state=42)
 X_train, X_valid, y_train, y_valid = train_test_split(
-    X_train_full, y_train_full, random_state=42
-)
+    X_train_full, y_train_full, random_state=42)
 
+# Convert to float32 tensors (PyTorch default for neural nets)
 X_train = torch.FloatTensor(X_train)
 X_valid = torch.FloatTensor(X_valid)
-X_test = torch.FloatTensor(X_test)
+X_test  = torch.FloatTensor(X_test)
+
+# Standardize using training set statistics only (prevent data leakage)
 means = X_train.mean(dim=0, keepdim=True)
-stds = X_train.std(dim=0, keepdim=True)
+stds  = X_train.std(dim=0, keepdim=True)
 X_train = (X_train - means) / stds
 X_valid = (X_valid - means) / stds
-X_test = (X_test - means) / stds
+X_test  = (X_test  - means) / stds
 
+# Reshape targets to column vectors for MSE compatibility
 y_train = torch.FloatTensor(y_train).reshape(-1, 1)
 y_valid = torch.FloatTensor(y_valid).reshape(-1, 1)
-y_test = torch.FloatTensor(y_test).reshape(-1, 1)
+y_test  = torch.FloatTensor(y_test).reshape(-1, 1)
 
-torch.manual_seed(42)
+# Standardize targets using training set mean/std (same principle as features)
+y_mean = y_train.mean()
+y_std  = y_train.std()
+y_train = (y_train - y_mean) / y_std
+y_valid = (y_valid - y_mean) / y_std
+y_test  = (y_test  - y_mean) / y_std
+
 n_features = X_train.shape[1]
+
+# ── Manual Linear Regression via Autograd ─────────────────────────────────────
+# Manually define weights and bias as learnable parameters.
+# This shows exactly what nn.Linear does under the hood.
+torch.manual_seed(42)
 w = torch.randn((n_features, 1), requires_grad=True)
 b = torch.tensor(0., requires_grad=True)
 
 learning_rate = 0.4
-n_epochs = 20
 for epoch in range(n_epochs):
-    y_pred = X_train @ w + b
-    loss = ((y_pred - y_train) ** 2).mean()
-    loss.backward()
-    with torch.no_grad():
+    y_pred = X_train @ w + b          # forward pass: linear combination
+    loss = ((y_pred - y_train) ** 2).mean()  # MSE loss
+    loss.backward()                   # backward pass: compute gradients
+    with torch.no_grad():             # update weights without tracking gradients
         w -= learning_rate * w.grad
         b -= learning_rate * b.grad
-        w.grad.zero_()
+        w.grad.zero_()                # reset gradients after each step
         b.grad.zero_()
     print(f"Epoch {epoch + 1}: Loss = {loss.item():.4f}")
 
@@ -123,306 +96,133 @@ with torch.no_grad():
     y_pred = X_new @ w + b
 print(y_pred)
 
+# 2. MID-LEVEL PYTORCH: nn.Linear + Batch Gradient Descent
+# nn.Linear wraps weights and bias into a module with automatic initialization.
+# Batch Gradient Descent: update weights once per full epoch (no DataLoader).
 
-###
-import torch.nn as nn
 torch.manual_seed(42)
 model = nn.Linear(in_features=n_features, out_features=1)
-print(model.bias)
-print(model.weight)
 
-for param in model.parameters():
-    print(param)
-
-print(model(X_train[:2]))
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 mse = nn.MSELoss()
 
-def train_bgd(model, optimizer, criterion, X_train, y_train, n_epochs):
-    for epoch in range(n_epochs):
-        y_pred = model(X_train)
-        loss = criterion(y_pred, y_train)
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        print(f"Epoch {epoch + 1}: Loss = {loss.item():.4f}")
+for epoch in range(n_epochs):
+    y_pred = model(X_train)
+    loss = mse(y_pred, y_train)
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()
+    print(f"Epoch {epoch + 1}: Loss = {loss.item():.4f}")
 
-train_bgd(model, optimizer, mse, X_train, y_train, n_epochs)
-X_new = X_test[:3]
-with torch.no_grad():
-    y_pred = model(X_new)
-print(y_pred)
+# 3. HIGH-LEVEL PYTORCH: nn.Sequential + Mini-Batch SGD + DataLoader
+# nn.Sequential stacks layers into a pipeline. DataLoader handles batching, shuffling, and iteration automatically. Mini-batch SGD: update weights after each batch → faster convergence.
 
-###
-torch.manual_seed(42)
-model = nn.Sequential(
-    nn.Linear(n_features, 50),
-    nn.ReLU(),
-    nn.Linear(50, 40),
-    nn.ReLU(),
-    nn.Linear(40, 1)
-)
-learning_rate = 0.1
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-mse = nn.MSELoss()
-train_bgd(model, optimizer, mse, X_train, y_train, n_epochs)
-
-###
-from torch.utils.data import TensorDataset, DataLoader
+# ── DataLoaders ───────────────────────────────────────────────────────────────
 train_dataset = TensorDataset(X_train, y_train)
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+valid_dataset = TensorDataset(X_valid, y_valid)
+train_loader  = DataLoader(train_dataset, batch_size=32, shuffle=True)
+valid_loader  = DataLoader(valid_dataset, batch_size=32)
+
+# ── Generic Training & Evaluation Functions ───────────────────────────────────
+# These reusable functions support:
+#   - dict-based inputs (named inputs via **kwargs) for multi-input models
+#   - torchmetrics for proper metric tracking across batches
+#   - optional auxiliary outputs (multi-output models)
+#   - history dict for plotting learning curves
+
+def evaluate(model, data_loader, metric):
+    """Evaluate model on a DataLoader using a torchmetrics metric.
+    Supports both standard (tensor) and dict-based (named) inputs.
+    Runs on CPU to avoid non-deterministic results on MPS."""
+    model.eval()
+    cpu_metric = metric.clone().to("cpu")
+    cpu_metric.reset()
+    with torch.no_grad():
+        for inputs, y_batch in data_loader:
+            if isinstance(inputs, dict):
+                inputs = {k: v.to(device) for k, v in inputs.items()}
+                output = model(**inputs)
+            else:
+                inputs = inputs.to(device)
+                output = model(inputs)
+            y_pred = output[0] if isinstance(output, tuple) else output
+            is_clf = y_pred.dim() == 2 and y_pred.shape[1] > 1
+            cpu_metric.update(y_pred.cpu() if is_clf else y_pred.cpu().flatten(),
+                              y_batch.flatten())
+    return cpu_metric.compute()
+
+def train(model, optimizer, criterion, metric, train_loader, valid_loader,
+          n_epochs):
+    """Generic training loop supporting:
+    - standard tensor inputs and dict-based named inputs (via **kwargs)
+    - single and multiple outputs (weighted auxiliary loss: 0.8 main + 0.2 aux)
+    - torchmetrics for train/valid tracking
+    Returns history dict with losses and metrics per epoch."""
+    history = {"train_losses": [], "train_metrics": [], "valid_metrics": []}
+    for epoch in range(n_epochs):
+        model.train()
+        total_loss = 0.
+        metric.reset()
+        for inputs, y_batch in train_loader:
+            y_batch = y_batch.to(device)
+            if isinstance(inputs, dict):
+                inputs = {k: v.to(device) for k, v in inputs.items()}
+                outputs = model(**inputs)
+            else:
+                outputs = model(inputs.to(device))
+            # Unpack main + optional auxiliary output (multi-output models)
+            if isinstance(outputs, tuple):
+                y_pred, y_aux = outputs
+                loss = 0.8 * criterion(y_pred, y_batch) + 0.2 * criterion(y_aux, y_batch)
+            else:
+                y_pred = outputs
+                loss = criterion(y_pred, y_batch)
+            total_loss += loss.item()
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            # Regression: [N,1] → flatten to [N]; Classification: keep [N,C] logits
+            is_clf = y_pred.dim() == 2 and y_pred.shape[1] > 1
+            metric.update(y_pred if is_clf else y_pred.flatten(),
+                          y_batch.flatten())
+        history["train_losses"].append(total_loss / len(train_loader))
+        history["train_metrics"].append(metric.compute().item())
+        history["valid_metrics"].append(evaluate(model, valid_loader, metric).item())
+        print(f"Epoch {epoch + 1}/{n_epochs}  "
+              f"loss: {history['train_losses'][-1]:.4f}  "
+              f"train: {history['train_metrics'][-1]:.4f}  "
+              f"valid: {history['valid_metrics'][-1]:.4f}")
+    return history
+
+# ── Deep Sequential Model ─────────────────────────────────────────────────────
+# 3-layer MLP: 8 → 50 → 40 → 1 (ReLU activations introduce non-linearity between layers.
 torch.manual_seed(42)
 model = nn.Sequential(
-    nn.Linear(n_features, 50),
-    nn.ReLU(),
-    nn.Linear(50, 40),
-    nn.ReLU(),
+    nn.Linear(n_features, 50), nn.ReLU(),
+    nn.Linear(50, 40),         nn.ReLU(),
     nn.Linear(40, 1)
 ).to(device)
 
-# extra code – build the optimizer and loss function, as earlier
-learning_rate = 0.02
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0)
-mse = nn.MSELoss()
-
-def train(model, optimizer, criterion, train_loader, n_epochs):
-    model.train()
-    for epoch in range(n_epochs):
-        total_loss = 0.0
-        for X_batch, y_batch in train_loader:
-            X_batch = X_batch.to(device)
-            y_batch = y_batch.to(device)
-            y_pred = model(X_batch)
-            loss = criterion(y_pred, y_batch)
-            total_loss += loss.item()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        mean_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch + 1}/{n_epochs}: Loss = {mean_loss:.4f}")
-
-train(model, optimizer, mse, train_loader, n_epochs)
-
-
-### Model Evaluation
-def evaluate(model, data_loader, metric_fn, aggregate_fn=torch.mean):
-    model.eval()
-    metrichs = []
-    with torch.no_grad():
-        for X_batch, y_batch in data_loader:
-            X_batch = X_batch.to(device)
-            y_batch = y_batch.to(device)
-            y_pred = model(X_batch)
-            metric = metric_fn(y_pred, y_batch)
-            metrichs.append(metric)
-        return aggregate_fn(torch.stack(metrichs))
-    
-valid_dataset = TensorDataset(X_valid, y_valid)
-valid_loader = DataLoader(valid_dataset, batch_size=32)
-valid_mse = evaluate(model, valid_loader, mse)
-print(f"Validation MSE: {valid_mse:.4f}")
-
-def mse(y_pred, y_true):
-    return ((y_pred - y_true) ** 2).mean().sqrt()
-
-print(evaluate(model, valid_loader, mse))
-print(valid_mse.sqrt())
-
-print(evaluate(model, valid_loader, mse, aggregate_fn = lambda metrics:torch.sqrt(torch.mean(metrics))))
-import torchmetrics
-
-def evaluate_tm(model, data_loader, metric):
-    model.eval()
-    metric.reset()
-    with torch.no_grad():
-        for X_batch, y_batch in data_loader:
-            X_batch = X_batch.to(device)
-            y_batch = y_batch.to(device)
-            y_pred = model(X_batch)
-            metric.update(y_pred, y_batch)
-        return metric.compute()
-    
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+mse  = nn.MSELoss()
 rmse = torchmetrics.MeanSquaredError(squared=False).to(device)
-print(evaluate_tm(model, valid_loader, rmse))
+history = train(model, optimizer, mse, rmse, train_loader, valid_loader, n_epochs)
 
-import matplotlib.pyplot as plt
-def train2(model, optimizer, criterion, metric, train_loader, valid_loader,
-               n_epochs):
-    history = {"train_losses": [], "train_metrics": [], "valid_metrics": []}
-    for epoch in range(n_epochs):
-        total_loss = 0.
-        metric.reset()
-        for X_batch, y_batch in train_loader:
-            model.train()
-            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-            y_pred = model(X_batch)
-            loss = criterion(y_pred, y_batch)
-            total_loss += loss.item()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            metric.update(y_pred, y_batch)
-        mean_loss = total_loss / len(train_loader)
-        history["train_losses"].append(mean_loss)
-        history["train_metrics"].append(metric.compute().item())
-        history["valid_metrics"].append(
-            evaluate_tm(model, valid_loader, metric).item())
-        print(f"Epoch {epoch + 1}/{n_epochs}, "
-              f"train loss: {history['train_losses'][-1]:.4f}, "
-              f"train metric: {history['train_metrics'][-1]:.4f}, "
-              f"valid metric: {history['valid_metrics'][-1]:.4f}")
-    return history
-
-torch.manual_seed(42)
-learning_rate = 0.01
-model = nn.Sequential(
-    nn.Linear(n_features, 50), nn.ReLU(),
-    nn.Linear(50, 40), nn.ReLU(),
-    nn.Linear(40, 30), nn.ReLU(),
-    nn.Linear(30, 1)
-)
-model = model.to(device)
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0)
-mse = nn.MSELoss()
-rmse = torchmetrics.MeanSquaredError(squared=False).to(device)
-history = train2(model, optimizer, mse, rmse, train_loader, valid_loader,
-                 n_epochs)
-
-# Since we compute the training metric
-plt.plot(np.arange(n_epochs) + 0.5, history["train_metrics"], ".--",
-         label="Training")
-plt.plot(np.arange(n_epochs) + 1.0, history["valid_metrics"], ".-",
-         label="Validation")
-plt.xlabel("Epoch")
-plt.ylabel("RMSE")
-plt.grid()
-plt.title("Learning curves")
-plt.axis([0.5, 20, 0.4, 1.0])
-plt.legend()
+# Plot learning curves to detect overfitting / underfitting
+plt.plot(np.arange(n_epochs) + 0.5, history["train_metrics"], ".--", label="Training")
+plt.plot(np.arange(n_epochs) + 1.0, history["valid_metrics"], ".-",  label="Validation")
+plt.xlabel("Epoch"); plt.ylabel("RMSE"); plt.title("Learning Curves")
+plt.grid(); plt.legend()
 plt.show()
 
-### Non-sequetntial model
-class WideAndDeep(nn.Module):
-    def __init__(self, n_features):
-        super().__init__()
-        self.deep_stack = nn.Sequential(
-            nn.Linear(n_features, 50), nn.ReLU(),
-            nn.Linear(50, 40),nn.ReLU(),
-            nn.Linear(50, 20),
-        )
-        self.output_layer = nn.Linear(40 + n_features, 1)
-    def forward(self, X):
-        deep_output = self.deep_stack(X)
-        wide_and_deep = torch.concat([X, deep_output], dim=1)
-        return self.output_layer(wide_and_deep)
-    
-torch.manual_seed(42)
-model = WideAndDeep(n_features).to(device)
-learning_rate = 0.02
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0)
-mse = nn.MSELoss()
-history = train2(model, optimizer, mse, rmse, train_loader, valid_loader, n_epochs)
+# 4. NON-SEQUENTIAL MODELS: Wide & Deep Architecture
+# Wide & Deep combines a shallow "wide" path (raw features) with a deep path (learned representations), allowing the model to memorize AND generalize.
+# Requires subclassing nn.Module to define custom forward() logic.
 
-class WideAndDeepV2(nn.Module):
-    def __init__(self, n_features):
-        super().__init__()
-        self.deep_stack = nn.Sequential(
-            nn.Linear(n_features, 50), nn.ReLU(),
-            nn.Linear(50, 40),nn.ReLU(),
-            nn.Linear(50, 20),
-        )
-        self.output_layer = nn.Linear(40 + n_features, 1)
-    def forward(self, X):
-        X_wide = X[:, :5]
-        X_deep = X[:, 2:]
-        deep_output = self.deep_stack(X_deep)
-        wide_and_deep = torch.concat([X_wide, deep_output], dim=1)
-        return self.output_layer(wide_and_deep)
-    
-torch.manual_seed(42)
-model = WideAndDeepV2(n_features).to(device)
-# extra code: train the model, exactly our previous models
-learning_rate = 0.002
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0)
-mse = nn.MSELoss()
-rmse = torchmetrics.MeanSquaredError(squared=False).to(device)
-history = train2(model, optimizer, mse, rmse, train_loader, valid_loader,
-                 n_epochs)
-    
-class WideAndDeepV3(nn.Module):
-    def __init__(self, n_features):
-        super().__init__()
-        self.deep_stack = nn.Sequential(
-            nn.Linear(n_features, 50), nn.ReLU(),
-            nn.Linear(50, 40),nn.ReLU(),
-            nn.Linear(50, 20),
-        )
-        self.output_layer = nn.Linear(40 + n_features, 1)
-    def forward(self, X_wide, X_deep):
-        deep_output = self.deep_stack(X_deep)
-        wide_and_deep = torch.concat([X_wide, deep_output], dim=1)
-        return self.output_layer(wide_and_deep)
-
-
-
-torch.manual_seed(42)
-train_data_wd = TensorDataset(X_train[:, :5], X_train[:, 2:], y_train)
-train_loader_wd = DataLoader(train_data_wd, batch_size=32, shuffle=True)
-valid_data_wd = TensorDataset(X_valid[:, :5], X_valid[:, 2:], y_valid)
-valid_loader_wd = DataLoader(valid_data_wd, batch_size=32)
-test_data_wd = TensorDataset(X_test[:, :5], X_test[:, 2:], y_test)
-test_loader_wd = DataLoader(test_data_wd, batch_size=32)
-
-def evaluate_multi_in(model, data_loader, metric):
-    model.eval()
-    metric.reset()  # reset the metric at the beginning
-    with torch.no_grad():
-        for X_batch_wide, X_batch_deep, y_batch in data_loader:
-            X_batch_wide = X_batch_wide.to(device)
-            X_batch_deep = X_batch_deep.to(device)
-            y_batch = y_batch.to(device)
-            y_pred = model(X_batch_wide, X_batch_deep)
-            metric.update(y_pred, y_batch)  # update it at each iteration
-    return metric.compute()  # compute the final result at the end
-
-def train_multi_in(model, optimizer, criterion, metric, train_loader,
-                   valid_loader, n_epochs):
-    history = {"train_losses": [], "train_metrics": [], "valid_metrics": []}
-    for epoch in range(n_epochs):
-        total_loss = 0.
-        metric.reset()
-        for *X_batch_inputs, y_batch in train_loader:
-            model.train()
-            X_batch_inputs = [X.to(device) for X in X_batch_inputs]
-            y_batch = y_batch.to(device)
-            y_pred = model(*X_batch_inputs)
-            loss = criterion(y_pred, y_batch)
-            total_loss += loss.item()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            metric.update(y_pred, y_batch)
-        mean_loss = total_loss / len(train_loader)
-        history["train_losses"].append(mean_loss)
-        history["train_metrics"].append(metric.compute().item())
-        history["valid_metrics"].append(
-            evaluate_multi_in(model, valid_loader, metric).item())
-        print(f"Epoch {epoch + 1}/{n_epochs}, "
-              f"train loss: {history['train_losses'][-1]:.4f}, "
-              f"train metric: {history['train_metrics'][-1]:.4f}, "
-              f"valid metric: {history['valid_metrics'][-1]:.4f}")
-    return history
-
-torch.manual_seed(42)
-learning_rate = 0.01
-model = WideAndDeepV3(n_features).to(device)
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0)
-mse = nn.MSELoss()
-rmse = torchmetrics.MeanSquaredError(squared=False).to(device)
-history = train_multi_in(model, optimizer, mse, rmse, train_loader_wd,
-                         valid_loader_wd, n_epochs)
-
+# ── Custom Dataset for Named Inputs ───────────────────────────────────────────
+# Using a dict-based Dataset allows passing named tensors to the model's forward() method via **kwargs, making the architecture explicit and flexible.
 class WideAndDeepDataset(torch.utils.data.Dataset):
+    """Dataset that returns a dict of named inputs for multi-input models."""
     def __init__(self, X_wide, X_deep, y):
         self.X_wide = X_wide
         self.X_deep = X_deep
@@ -432,288 +232,322 @@ class WideAndDeepDataset(torch.utils.data.Dataset):
         return len(self.y)
 
     def __getitem__(self, idx):
-        input_dict = {"X_wide": self.X_wide[idx], "X_deep": self.X_deep[idx]}
-        return input_dict, self.y[idx]
+        return {"X_wide": self.X_wide[idx], "X_deep": self.X_deep[idx]}, self.y[idx]
 
-torch.manual_seed(42)
-train_data_named = WideAndDeepDataset(
-    X_wide=X_train[:, :5], X_deep=X_train[:, 2:], y=y_train)
-train_loader_named = DataLoader(train_data_named, batch_size=32, shuffle=True)
-valid_data_named = WideAndDeepDataset(
-    X_wide=X_valid[:, :5], X_deep=X_valid[:, 2:], y=y_valid)
-valid_loader_named = DataLoader(valid_data_named, batch_size=32)
-test_data_named = WideAndDeepDataset(
-    X_wide=X_test[:, :5], X_deep=X_test[:, 2:], y=y_test)
-test_loader_named = DataLoader(test_data_named, batch_size=32)
+# Wide path: first 5 features (e.g. location-based)
+# Deep path: features 2–7 (overlapping subset for richer representation)
+train_loader_named = DataLoader(WideAndDeepDataset(X_train[:, :5], X_train[:, 2:], y_train), batch_size=32, shuffle=True)
+valid_loader_named = DataLoader(WideAndDeepDataset(X_valid[:, :5], X_valid[:, 2:], y_valid), batch_size=32)
 
-def evaluate_named(model, data_loader, metric):
-    model.eval()
-    metric.reset()  # reset the metric at the beginning
-    with torch.no_grad():
-        for inputs, y_batch in data_loader:
-            inputs = {name: X.to(device) for name, X in inputs.items()}
-            y_batch = y_batch.to(device)
-            y_pred = model(X_wide=inputs["X_wide"], X_deep=inputs["X_deep"])
-            metric.update(y_pred, y_batch)
-    return metric.compute()  # compute the final result at the end
-
-def train_named(model, optimizer, criterion, metric, train_loader,
-                   valid_loader, n_epochs):
-    history = {"train_losses": [], "train_metrics": [], "valid_metrics": []}
-    for epoch in range(n_epochs):
-        total_loss = 0.
-        metric.reset()
-        for inputs, y_batch in train_loader:
-            model.train()
-            inputs = {name: X.to(device) for name, X in inputs.items()}
-            y_batch = y_batch.to(device)
-            y_pred = model(**inputs)
-            loss = criterion(y_pred, y_batch)
-            total_loss += loss.item()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            metric.update(y_pred, y_batch)
-        mean_loss = total_loss / len(train_loader)
-        history["train_losses"].append(mean_loss)
-        history["train_metrics"].append(metric.compute().item())
-        history["valid_metrics"].append(
-            evaluate_named(model, valid_loader, metric).item())
-        print(f"Epoch {epoch + 1}/{n_epochs}, "
-              f"train loss: {history['train_losses'][-1]:.4f}, "
-              f"train metric: {history['train_metrics'][-1]:.4f}, "
-              f"valid metric: {history['valid_metrics'][-1]:.4f}")
-    return history
-
-torch.manual_seed(42)
-learning_rate = 0.01
-model = WideAndDeepV3(n_features).to(device)
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0)
-mse = nn.MSELoss()
-rmse = torchmetrics.MeanSquaredError(squared=False).to(device)
-history = train_named(model, optimizer, mse, rmse, train_loader_named,
-                      valid_loader_named, n_epochs)
-
-
-class WideAndDeepV4(nn.Module):
-    def __init__(self, n_features):
+# ── Wide & Deep with Multiple Inputs ──────────────────────────────────────────
+# X_wide: short path directly to output (memorization)
+# X_deep: passes through deep stack (generalization)
+# Concatenated before the output layer → model sees both representations
+class WideAndDeep(nn.Module):
+    def __init__(self, n_wide, n_deep):
         super().__init__()
         self.deep_stack = nn.Sequential(
-            nn.Linear(n_features - 2, 50), nn.ReLU(),
-            nn.Linear(50, 40), nn.ReLU(),
-            nn.Linear(40, 30), nn.ReLU(),
+            nn.Linear(n_deep, 50), nn.ReLU(),
+            nn.Linear(50, 40),     nn.ReLU(),
+            nn.Linear(40, 30),     nn.ReLU(),
         )
-        self.output_layer = nn.Linear(30 + 5, 1)
-        self.aux_output_layer = nn.Linear(30, 1)
+        self.output_layer = nn.Linear(30 + n_wide, 1)
 
     def forward(self, X_wide, X_deep):
         deep_output = self.deep_stack(X_deep)
-        wide_and_deep = torch.concat([X_wide, deep_output], dim=1)
-        main_output = self.output_layer(wide_and_deep)
-        aux_output = self.aux_output_layer(deep_output)
-        return main_output, aux_output
-
-import torchmetrics
-
-def evaluate_multi_out(model, data_loader, metric):
-    model.eval()
-    metric.reset()
-    with torch.no_grad():
-        for inputs, y_batch in data_loader:
-            inputs = {name: X.to(device) for name, X in inputs.items()}
-            y_batch = y_batch.to(device)
-            y_pred, _ = model(**inputs)
-            metric.update(y_pred, y_batch)
-    return metric.compute()
-
-def train_multi_out(model, optimizer, criterion, metric, train_loader,
-                   valid_loader, n_epochs):
-    history = {"train_losses": [], "train_metrics": [], "valid_metrics": []}
-    for epoch in range(n_epochs):
-        total_loss = 0.
-        metric.reset()
-        for inputs, y_batch in train_loader:
-            model.train()
-            inputs = {name: X.to(device) for name, X in inputs.items()}
-            y_batch = y_batch.to(device)
-            y_pred, y_pred_aux = model(**inputs)
-            main_loss = criterion(y_pred, y_batch)
-            aux_loss = criterion(y_pred_aux, y_batch)
-            loss = 0.8 * main_loss + 0.2 * aux_loss
-            total_loss += loss.item()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            metric.update(y_pred, y_batch)
-        mean_loss = total_loss / len(train_loader)
-        history["train_losses"].append(mean_loss)
-        history["train_metrics"].append(metric.compute().item())
-        history["valid_metrics"].append(
-            evaluate_multi_out(model, valid_loader, metric).item())
-        print(f"Epoch {epoch + 1}/{n_epochs}, "
-              f"train loss: {history['train_losses'][-1]:.4f}, "
-              f"train metric: {history['train_metrics'][-1]:.4f}, "
-              f"valid metric: {history['valid_metrics'][-1]:.4f}")
-    return history
+        return self.output_layer(torch.concat([X_wide, deep_output], dim=1))
 
 torch.manual_seed(42)
-learning_rate = 0.01
-model = WideAndDeepV4(n_features).to(device)
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0)
-mse = nn.MSELoss()
+model = WideAndDeep(n_wide=5, n_deep=n_features - 2).to(device)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+mse  = nn.MSELoss()
 rmse = torchmetrics.MeanSquaredError(squared=False).to(device)
-history = train_multi_out(model, optimizer, mse, rmse, train_loader_named,
-                          valid_loader_named, n_epochs)
+history = train(model, optimizer, mse, rmse, train_loader_named, valid_loader_named, n_epochs)
 
-### Classification
-import torchvision
-import torchvision.transforms.v2 as T
+# ── Wide & Deep with Auxiliary Output ─────────────────────────────────────────
+# An auxiliary output on the deep path acts as a regularizer: it forces the deep layers to learn useful representations independently, preventing the wide path from dominating training.
+class WideAndDeepWithAux(nn.Module):
+    def __init__(self, n_wide, n_deep):
+        super().__init__()
+        self.deep_stack = nn.Sequential(
+            nn.Linear(n_deep, 50), nn.ReLU(),
+            nn.Linear(50, 40),     nn.ReLU(),
+            nn.Linear(40, 30),     nn.ReLU(),
+        )
+        self.output_layer     = nn.Linear(30 + n_wide, 1)
+        self.aux_output_layer = nn.Linear(30, 1)  # auxiliary head on deep path
 
+    def forward(self, X_wide, X_deep):
+        deep_output    = self.deep_stack(X_deep)
+        main_output    = self.output_layer(torch.concat([X_wide, deep_output], dim=1))
+        aux_output     = self.aux_output_layer(deep_output)
+        return main_output, aux_output  # train() handles the weighted loss
+
+torch.manual_seed(42)
+model = WideAndDeepWithAux(n_wide=5, n_deep=n_features - 2).to(device)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+mse  = nn.MSELoss()
+rmse = torchmetrics.MeanSquaredError(squared=False).to(device)
+history = train(model, optimizer, mse, rmse, train_loader_named, valid_loader_named,
+                n_epochs)
+
+# 5. CLASSIFICATION: Fashion MNIST with MLP
+# Fashion MNIST: 70k grayscale images (28×28) across 10 clothing categories. (torchvision handles downloading, caching and applying transforms automatically.)
+
+# ── Data Loading ──────────────────────────────────────────────────────────────
+# ToImage converts PIL → tensor, ToDtype scales pixel values from [0,255] to [0,1]
 toTensor = T.Compose([T.ToImage(), T.ToDtype(torch.float32, scale=True)])
-train_and_valid_data = torchvision.datasets.FashionMNIST(root="datasets", train=True, download=True, transform=toTensor)
-test_data = torchvision.datasets.FashionMNIST(root="datasets", train=False, download=True, transform=toTensor)
+train_and_valid_data = torchvision.datasets.FashionMNIST(root="datasets", train=True,  download=True, transform=toTensor)
+test_data            = torchvision.datasets.FashionMNIST(root="datasets", train=False, download=True, transform=toTensor)
+
+# Split 60k training samples into 55k train / 5k validation
 torch.manual_seed(42)
 train_data, valid_data = torch.utils.data.random_split(train_and_valid_data, [55000, 5000])
 
 train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
-vaild_loader = DataLoader(valid_data, batch_size=32)
-test_loader = DataLoader(test_data, batch_size=32)
+valid_loader = DataLoader(valid_data, batch_size=32)
+test_loader  = DataLoader(test_data,  batch_size=32)
 
+# Inspect a single sample: shape [C, H, W], dtype float32
 X_sample, y_sample = train_data[0]
-print(X_sample.shape)
-print(X_sample.dtype)
-print(train_and_valid_data.classes[y_sample])
+print(f"Shape: {X_sample.shape}, dtype: {X_sample.dtype}, class: {train_and_valid_data.classes[y_sample]}")
 
+# ── Model: MLP Image Classifier ───────────────────────────────────────────────
+# Flatten 28×28 image to 784-dim vector, then two hidden layers → 10 logits.
+# No softmax here: CrossEntropyLoss expects raw logits and applies it internally.
 class ImageClassifier(nn.Module):
     def __init__(self, n_inputs, n_hidden1, n_hidden2, n_classes):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(n_inputs, n_hidden1), nn.ReLU(),
-            nn.Linear(n_hidden1, n_hidden2), nn.ReLU(),
-            nn.Linear(n_hidden2, n_classes)
+            nn.Linear(n_inputs,   n_hidden1), nn.ReLU(),
+            nn.Linear(n_hidden1,  n_hidden2), nn.ReLU(),
+            nn.Linear(n_hidden2,  n_classes)   # raw logits
         )
 
     def forward(self, X):
         return self.mlp(X)
-    
-torch.manual_seed(42)
-model = ImageClassifier(n_inputs=28*28, n_hidden1=300, n_hidden2=100, n_classes=10)
-xentropy = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=10).to(device)
-_ = train2(model, optimizer, xentropy, accuracy, train_loader, valid_loader,
-           n_epochs)
 
+torch.manual_seed(42)
+model     = ImageClassifier(n_inputs=28*28, n_hidden1=300, n_hidden2=100, n_classes=10).to(device)
+xentropy  = nn.CrossEntropyLoss()
+optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+accuracy  = torchmetrics.Accuracy(task="multiclass", num_classes=10).to(device)
+history   = train(model, optimizer, xentropy, accuracy, train_loader, valid_loader, n_epochs)
+
+# ── Inference: Probabilities & Top-k Predictions ──────────────────────────────
+# argmax on logits gives the predicted class index. softmax converts logits to probabilities (sum to 1 per sample). topk returns the k highest logits + their indices for confidence analysis.
 model.eval()
-X_new, y_new = next(iter(vaild_loader))
+X_new, y_new = next(iter(valid_loader))
 X_new = X_new[:3].to(device)
 with torch.no_grad():
     y_pred_logits = model(X_new)
 
-y_pred = y_pred_logits.argmax(dim=1)
-print(y_pred)
-[train_and_valid_data.classes[index] for index in y_pred]
-print(y_new[:3])
+y_pred_classes = y_pred_logits.argmax(dim=1)
+print("Predicted:", [train_and_valid_data.classes[i] for i in y_pred_classes])
+print("Actual:   ", [train_and_valid_data.classes[i] for i in y_new[:3]])
 
-import torch.nn.functional as F
-y_proba = F.softmax(y_pred_logits, dim=1)
-if device == "mps":
-    y_proba = y_proba.cpu()
+# Full probability distribution over all 10 classes
+y_proba = F.softmax(y_pred_logits, dim=1).cpu()
 print(y_proba.round(decimals=3))
 
+# Top-4 most likely classes per sample
 y_top4_logits, y_top4_indices = torch.topk(y_pred_logits, k=4, dim=1)
-y_top4_probas = F.softmax(y_top4_logits, dim=1)
-if device == "mps":
-    y_top4_probas = y_top4_probas.cpu()
+y_top4_probas = F.softmax(y_top4_logits, dim=1).cpu()
 print(y_top4_probas.round(decimals=3))
-print(y_top4_indices)
-print(sum([param.numel() for param in model.parameters()]))
+print([[train_and_valid_data.classes[i] for i in row] for row in y_top4_indices])
 
-### Hyperparameter Tuning
-import optuna
-def objective(trial):
-    learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-1, log=True)
-    n_hidden = trial.suggest_int("n_hidden", 20, 300)
-    model = ImageClassifier(n_inputs=1*28*28, n_hidden1=n_hidden, n_hidden2=n_hidden, n_classes=10).to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-    xentropy = nn.CrossEntropyLoss()
-    accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=10).to(device)
-    history = train2(model, optimizer, xentropy, accuracy, train_loader, valid_loader, n_epochs=10)
-    validation_accuracy = max(history["valid_metrics"])
-    return validation_accuracy
+# Total number of trainable parameters
+print(f"Total parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-torch.manual_seed(42)
-sampler = optuna.samplers.TPESampler(seed=42)
-study = optuna.create_study(direction="maximize", sampler=sampler)
-study.optimize(objective, n_trials=5)
-
-print(study.best_params)
-print(study.best_value)
+# 6. HYPERPARAMETER TUNING WITH OPTUNA
+# Optuna uses Bayesian optimization (TPE sampler) to efficiently search the hyperparameter space – much smarter than grid or random search.
+# Pruning stops unpromising trials early (MedianPruner: prune if below median).
 
 def objective(trial, train_loader, valid_loader):
-    learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-1, log=True)
+    """Optuna objective: train one model config and return best validation accuracy.
+    trial.report() + trial.should_prune() enable early stopping of bad trials."""
+    lr       = trial.suggest_float("learning_rate", 1e-5, 1e-1, log=True)
     n_hidden = trial.suggest_int("n_hidden", 20, 300)
-    model = ImageClassifier(n_inputs=1 * 28 * 28, n_hidden1=n_hidden, n_hidden2=n_hidden, n_classes=10).to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-    xentropy = nn.CrossEntropyLoss()
-    accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=10)
-    accuracy = accuracy.to(device)
-    best_validation_accuracy = 0.0
+    model    = ImageClassifier(28*28, n_hidden, n_hidden, 10).to(device)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    accuracy  = torchmetrics.Accuracy(task="multiclass", num_classes=10).to(device)
+    best_acc  = 0.0
     for epoch in range(n_epochs):
-        history = train2(model, optimizer, xentropy, accuracy, train_loader, valid_loader, n_epochs=1)
-        validation_accuracy = max(history["valid_metrics"])
-        if validation_accuracy > best_validation_accuracy:
-            best_validation_accuracy = validation_accuracy
-        trial.report(validation_accuracy, epoch)
+        history  = train(model, optimizer, xentropy, accuracy, train_loader, valid_loader, n_epochs=1)
+        val_acc  = history["valid_metrics"][-1]
+        best_acc = max(best_acc, val_acc)
+        trial.report(val_acc, epoch)       # report intermediate value for pruning
         if trial.should_prune():
-            raise optuna.TrialPruned()
-    return best_validation_accuracy
+            raise optuna.TrialPruned()     # stop this trial early
+    return best_acc
 
-objective_with_data = lambda trial: objective(trial, train_loader, vaild_loader)
-study.optimize(objective_with_data, n_trials=5)
-
-from functools import partial
-objective_with_data = partial(objective, train_loader=train_loader, valid_loader=vaild_loader)
 sampler = optuna.samplers.TPESampler(seed=42)
-pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=0, interval_steps=1)
-study = optuna.create_study(direction="maximize", sampler=sampler, pruner=pruner)
-study.optimize(objective_with_data, n_trials=20)
-print(study.best_value)
-print(study.best_params)
+pruner  = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=5)
+study   = optuna.create_study(direction="maximize", sampler=sampler, pruner=pruner)
+study.optimize(partial(objective, train_loader=train_loader, valid_loader=valid_loader), n_trials=20)
 
-### Saving and Loading
-torch.save(model, "my_fasion_mnist.pt")
-loaded_model = torch.load("my_fasion_mnist.pt", weights_only=False)
-loaded_model.eval()
-y_pred_logits = loaded_model(X_new)
+print(f"Best accuracy: {study.best_value:.4f}")
+print(f"Best params:   {study.best_params}")
 
-torch.save(model.state_dict(), "my_fasion_mnist_state_dict.pt")
-new_model = ImageClassifier(n_inputs=1*28*28, n_hidden1=300, n_hidden2=100, n_classes=10)
-loaded_weights = torch.load("my_fasion_mnist_state_dict.pt", weights_only=True)
-new_model.load_state_dict(loaded_weights)
-new_model.eval()
+# 7. SAVING AND LOADING MODELS
+# Best practice: save state_dict + hyperparameters together so the model can
+# be fully reconstructed without access to the original training code.
 
 model_data = {
-    "model_state_dict": model.state_dict(),
-    "model_hyperparameters": {"n_inputs": 1 * 28 * 28, "n_hidden1": 300, "n_hidden2": 100, "n_classes": 10}
+    "model_state_dict":      model.state_dict(),
+    "model_hyperparameters": {"n_inputs": 28*28, "n_hidden1": 300, "n_hidden2": 100, "n_classes": 10}
 }
-torch.save(model_data, "my_fasion_mnist_data.pt")
-loaded_data = torch.load("my_fasion_mnist_data.pt", weights_only=True)
-new_model = ImageClassifier(**loaded_data["model_hyperparameters"])
+torch.save(model_data, "fashion_mnist.pt")
+
+# Reload: reconstruct architecture from saved hyperparameters, then load weights
+loaded_data = torch.load("fashion_mnist.pt", weights_only=True)
+new_model   = ImageClassifier(**loaded_data["model_hyperparameters"])
 new_model.load_state_dict(loaded_data["model_state_dict"])
 new_model.eval()
 
-torchscript_model = torch.jit.trace(model, X_new)
-torchscript_model = torch.jit.script(model)
+# Verify predictions match the original model
+with torch.no_grad():
+    y_pred_loaded = new_model(X_new.cpu())
+print("Loaded model predictions match:", torch.allclose(y_pred_logits.cpu(), y_pred_loaded))
 
-optimized_model = torch.jit.optimize_for_inference(torchscript_model)
-torchscript_model.save("my_fasion_mnist_torchscript.pt")
-loaded_torchscript_model = torch.jit.load("my_fasion_mnist_torchscript.pt")
-
-y_pred_logits = loaded_torchscript_model(X_new)
-print(y_pred_logits)
-
+# ── torch.compile ─────────────────────────────────────────────────────────────
+# torch.compile (PyTorch 2.0+) replaces the deprecated TorchScript (jit.trace/script).
+# It JIT-compiles the model using TorchDynamo + TorchInductor for faster inference,
+# requires zero changes to model code, and works on any nn.Module.
 compiled_model = torch.compile(model)
+with torch.no_grad():
+    y_pred_compiled = compiled_model(X_new)
+print("Compiled model output shape:", y_pred_compiled.shape)
 
-### Exercises:
+# ══════════════════════════════════════════════════════════════════════════════
+# EXERCISES
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Exercise 1: Autograd on a custom function ─────────────────────────────────
+# Compute partial derivatives of f(x,y) = sin(x²y) at x=1.2, y=3.4
+# PyTorch builds a computation graph and differentiates automatically.
+def f(x, y):
+    return torch.sin(x ** 2 * y)
+
+x = torch.tensor(1.2, requires_grad=True)
+y = torch.tensor(3.4, requires_grad=True)
+f(x, y).backward()
+print(f"df/dx={x.grad.item():.4f}, df/dy={y.grad.item():.4f}")
+
+# ── Exercise 2: Custom Dense Layer ────────────────────────────────────────────
+# Dense v1: wraps nn.Linear + nn.ReLU (high-level, recommended)
+# Dense v2: manually defines weight/bias as nn.Parameter (low-level, educational)
+# Both are equivalent – v2 shows what nn.Linear does internally.
+# Kaiming (He) initialization is the standard for ReLU networks.
+class Dense(nn.Module):
+    """High-level dense layer using nn.Linear + nn.ReLU."""
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        self.linear = nn.Linear(in_features, out_features)
+        self.relu   = nn.ReLU()
+
+    def forward(self, X):
+        return self.relu(self.linear(X))
+
+class Dense2(nn.Module):
+    """Low-level dense layer with manual weight/bias parameters.
+    Uses Kaiming uniform init (optimal for ReLU activations)."""
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(out_features, in_features))
+        nn.init.kaiming_uniform_(self.weight, nonlinearity="relu")
+        self.bias = nn.Parameter(torch.zeros(out_features))
+
+    def forward(self, X):
+        return F.relu(X @ self.weight.T + self.bias)
+
+# Verify both implementations produce identical outputs
+torch.manual_seed(42)
+X = torch.randn(2, 3)
+dense  = Dense(3, 5)
+dense2 = Dense2(3, 5)
+print("Dense output shape:",  dense(X).shape)
+print("Dense2 output shape:", dense2(X).shape)
+
+# ── Exercise 3: CoverType Classification ──────────────────────────────────────
+# Forest cover type dataset: 581k samples, 54 features, 7 classes.
+# Uses Dense2 as building block to show how custom layers compose into a full model.
+# CoverTypeModel accepts a list of hidden sizes → flexible depth/width.
+covtype   = fetch_covtype()
+X_cov     = torch.tensor(covtype.data, dtype=torch.float32)
+y_cov     = torch.tensor(covtype.target - 1, dtype=torch.long)  # 0-indexed classes
+
+# Standardize features
+X_cov = (X_cov - X_cov.mean(0)) / X_cov.std(0)
+
+# 80/10/10 split
+torch.manual_seed(42)
+n       = len(y_cov)
+sizes   = [n * 8 // 10, n // 10]
+sizes  += [n - sum(sizes)]  # remainder goes to test
+train_ds, valid_ds, test_ds = random_split(TensorDataset(X_cov, y_cov), sizes)
+
+train_loader_cov = DataLoader(train_ds, batch_size=256, shuffle=True)
+valid_loader_cov = DataLoader(valid_ds, batch_size=256)
+test_loader_cov  = DataLoader(test_ds,  batch_size=256)
+
+n_inputs  = X_cov.shape[1]   # 54
+n_classes = 7
+
+class CoverTypeModel(nn.Module):
+    """Flexible MLP built from Dense2 layers.
+    n_neurons: list of hidden layer sizes, e.g. [200, 100, 50]
+    Uses nn.ModuleList so PyTorch tracks all parameters correctly."""
+    def __init__(self, n_neurons, n_inputs=n_inputs, n_classes=n_classes):
+        super().__init__()
+        sizes = [n_inputs] + n_neurons
+        self.layers = nn.ModuleList(
+            [Dense2(sizes[i], sizes[i+1]) for i in range(len(n_neurons))]
+            + [nn.Linear(n_neurons[-1], n_classes)]  # final linear (no activation)
+        )
+
+    def forward(self, X):
+        for layer in self.layers:
+            X = layer(X)
+        return X
+
+torch.manual_seed(42)
+covtype_model = CoverTypeModel([200, 100, 50]).to(device)
+criterion     = nn.CrossEntropyLoss()
+metric_cov    = torchmetrics.Accuracy(task="multiclass", num_classes=n_classes).to(device)
+optimizer     = torch.optim.SGD(covtype_model.parameters(), lr=0.01)
+history       = train(covtype_model, optimizer, criterion, metric_cov,
+                      train_loader_cov, valid_loader_cov, n_epochs=15)
+print(f"Test accuracy: {evaluate(covtype_model, test_loader_cov, metric_cov):.4f}")
+
+# ── Exercise 4: Optuna Hyperparameter Search on CoverType ─────────────────────
+# Search over learning rate, number of layers and hidden size.
+# Pruning cuts unpromising trials early based on intermediate validation accuracy.
+def covtype_objective(trial):
+    lr       = trial.suggest_float("learning_rate", 1e-2, 1.0, log=True)
+    n_layers = trial.suggest_int("n_layers", 1, 3)
+    n_hidden = trial.suggest_int("n_hidden", 30, 150)
+    model    = CoverTypeModel([n_hidden] * n_layers).to(device)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    accuracy  = torchmetrics.Accuracy(task="multiclass", num_classes=n_classes).to(device)
+    best_acc  = 0.0
+    for epoch in range(15):
+        history  = train(model, optimizer, nn.CrossEntropyLoss(), accuracy,
+                         train_loader_cov, valid_loader_cov, n_epochs=1)
+        val_acc  = history["valid_metrics"][-1]
+        best_acc = max(best_acc, val_acc)
+        trial.report(val_acc, step=epoch)
+        if trial.should_prune():
+            raise optuna.TrialPruned()
+    return best_acc
+
+torch.manual_seed(42)
+study = optuna.create_study(
+    direction="maximize",
+    sampler=optuna.samplers.TPESampler(seed=42),
+    pruner=optuna.pruners.MedianPruner()
+)
+study.optimize(covtype_objective, n_trials=5)
+print(f"Best accuracy: {study.best_value:.4f}")
+print(f"Best params:   {study.best_params}")
